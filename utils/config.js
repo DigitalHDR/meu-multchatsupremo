@@ -7,6 +7,8 @@ const ENV_PATH = path.join(__dirname, '..', '.env');
 /** Portas fixas disponíveis para seleção */
 const AVAILABLE_PORTS = [3847, 3857, 3867];
 
+const SOUND_INTERVALS = [0, 10, 20, 30, 40, 50, 60];
+
 const DEFAULT_ENV = {
   PORT: '3847',
   TWITCH_CHANNEL: '',
@@ -16,10 +18,39 @@ const DEFAULT_ENV = {
   TWITCH_OAUTH: '',
   OVERLAY_FONT_SIZE: '22',
   OVERLAY_FONT_SIZE_FIXO: '16',
+  NOTIFICATION_SOUND_ENABLED: '1',
+  NOTIFICATION_SOUND_INTERVAL: '0',
 };
 
 const MIN_FONT_SIZE = 10;
 const MAX_FONT_SIZE = 36;
+
+const ENV_KEYS = [
+  'PORT',
+  'TWITCH_CHANNEL',
+  'KICK_CHANNEL',
+  'YOUTUBE_CHANNEL',
+  'YOUTUBE_VIDEO_ID',
+  'TWITCH_OAUTH',
+  'OVERLAY_FONT_SIZE',
+  'OVERLAY_FONT_SIZE_FIXO',
+  'NOTIFICATION_SOUND_ENABLED',
+  'NOTIFICATION_SOUND_INTERVAL',
+];
+
+function normalizeSoundEnabled(value) {
+  const raw = String(value ?? DEFAULT_ENV.NOTIFICATION_SOUND_ENABLED).trim().toLowerCase();
+  if (['0', 'false', 'off', 'no', 'nao', 'não'].includes(raw)) return '0';
+  return '1';
+}
+
+function normalizeSoundInterval(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || !SOUND_INTERVALS.includes(n)) {
+    throw new Error(`Intervalo do som inválido. Use: ${SOUND_INTERVALS.join(', ')} segundos.`);
+  }
+  return String(n);
+}
 
 function readEnvFile() {
   if (!fs.existsSync(ENV_PATH)) {
@@ -36,9 +67,16 @@ function readEnvFile() {
     if (eq === -1) continue;
     const key = trimmed.slice(0, eq).trim();
     const value = trimmed.slice(eq + 1).trim();
-    if (key in config || ['PORT', 'TWITCH_CHANNEL', 'KICK_CHANNEL', 'YOUTUBE_CHANNEL', 'YOUTUBE_VIDEO_ID', 'TWITCH_OAUTH', 'OVERLAY_FONT_SIZE', 'OVERLAY_FONT_SIZE_FIXO'].includes(key)) {
+    if (key in config || ENV_KEYS.includes(key)) {
       config[key] = value;
     }
+  }
+
+  config.NOTIFICATION_SOUND_ENABLED = normalizeSoundEnabled(config.NOTIFICATION_SOUND_ENABLED);
+  try {
+    config.NOTIFICATION_SOUND_INTERVAL = normalizeSoundInterval(config.NOTIFICATION_SOUND_INTERVAL);
+  } catch {
+    config.NOTIFICATION_SOUND_INTERVAL = DEFAULT_ENV.NOTIFICATION_SOUND_INTERVAL;
   }
 
   return config;
@@ -62,6 +100,11 @@ function writeEnvFile(updates) {
     throw new Error(`Tamanho da fonte do chat fixo inválido. Use entre ${MIN_FONT_SIZE} e ${MAX_FONT_SIZE}px.`);
   }
 
+  const soundEnabled = normalizeSoundEnabled(merged.NOTIFICATION_SOUND_ENABLED);
+  const soundInterval = normalizeSoundInterval(
+    merged.NOTIFICATION_SOUND_INTERVAL ?? DEFAULT_ENV.NOTIFICATION_SOUND_INTERVAL
+  );
+
   const lines = [
     '# Porta do servidor local',
     `PORT=${port}`,
@@ -81,10 +124,20 @@ function writeEnvFile(updates) {
     `OVERLAY_FONT_SIZE=${Math.round(fontSize)}`,
     `OVERLAY_FONT_SIZE_FIXO=${Math.round(fontSizeFixo)}`,
     '',
+    '# Som de notificação (0 = a cada mensagem; 10–60 = intervalo mínimo em segundos)',
+    `NOTIFICATION_SOUND_ENABLED=${soundEnabled}`,
+    `NOTIFICATION_SOUND_INTERVAL=${soundInterval}`,
+    '',
   ];
 
   fs.writeFileSync(ENV_PATH, lines.join('\n'), 'utf8');
-  return merged;
+  return {
+    ...merged,
+    OVERLAY_FONT_SIZE: String(Math.round(fontSize)),
+    OVERLAY_FONT_SIZE_FIXO: String(Math.round(fontSizeFixo)),
+    NOTIFICATION_SOUND_ENABLED: soundEnabled,
+    NOTIFICATION_SOUND_INTERVAL: soundInterval,
+  };
 }
 
 function isPortInUse(port) {
@@ -123,7 +176,11 @@ async function getPortsStatus(currentPort) {
 module.exports = {
   ENV_PATH,
   AVAILABLE_PORTS,
+  SOUND_INTERVALS,
   readEnvFile,
   writeEnvFile,
   getPortsStatus,
+  normalizeSoundEnabled,
+  normalizeSoundInterval,
+  SOUND_INTERVALS,
 };

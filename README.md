@@ -8,7 +8,8 @@ Agrega mensagens do chat do **Twitch**, **Kick** e **YouTube** em um único over
 - Overlay com fundo transparente para o OBS
 - Emotes do Twitch, Kick e YouTube
 - Mensagens somem automaticamente após **1 minuto** (padrão) ou **10 minutos** (modo chat fixo)
-- Som de notificação (`notification-som/notification.mp3`) a cada mensagem nova no overlay (desative com `?sound=0` na URL)
+- Som de notificação (`notification-som/notification.mp3`) a cada mensagem nova no overlay (desative na interface, no `.env` ou com `?sound=0` na URL)
+- Intervalo mínimo configurável entre sons: **0** (a cada mensagem) ou **10–60 segundos**
 - Interface desktop **Qt 6** (`gui/multichat_app.py`) com tema escuro, escolha do **tamanho da fonte** (10–36 px) e botões **▲▼** para ajuste fino
 - Painel web alternativo em `http://localhost:PORTA`
 - Três portas fixas disponíveis: **3847**, **3857**, **3867**
@@ -80,6 +81,7 @@ A pasta **`gui/`** contém a interface desktop principal:
 - **Twitch**, **Kick**, **YouTube canal**, **YouTube vídeo ID**
 - **Tamanho da fonte — overlay público** (`/overlaypublico`) — padrão 22 px — botões **▲** (aumentar) e **▼** (diminuir)
 - **Tamanho da fonte — chat fixo** (`/chatfixostremer`) — padrão 16 px — mesmos controles
+- **Notificação** — ativar/desativar o som e escolher o intervalo mínimo entre toques (a cada mensagem, ou 10/20/30/40/50/60 segundos)
 - **Porta do servidor:** 3847, 3857 ou 3867 (status: Livre / Em uso / Ativa)
 - **URLs para o OBS** (com botão Copiar):
 
@@ -118,7 +120,7 @@ Arquivos: `public/index.html`, `public/panel.js`, `public/panel.css`
 |--------|------|-----------|
 | `GET` | `/api/config` | Lê `.env`, status das portas e portas disponíveis |
 | `POST` | `/api/config` | Salva canais, porta e tamanhos de fonte |
-| `PATCH` | `/api/overlay-appearance` | Atualiza só `OVERLAY_FONT_SIZE` e `OVERLAY_FONT_SIZE_FIXO` |
+| `PATCH` | `/api/overlay-appearance` | Atualiza fonte e opções de som de notificação |
 | `GET` | `/api/status` | Status das conexões Twitch, Kick e YouTube |
 
 Rotas do overlay:
@@ -153,6 +155,11 @@ TWITCH_OAUTH=
 # Tamanho da fonte das mensagens no overlay (10 a 36)
 OVERLAY_FONT_SIZE=22
 OVERLAY_FONT_SIZE_FIXO=16
+
+# Som de notificação (1 = ligado, 0 = desligado)
+# Intervalo mínimo entre sons: 0 = a cada mensagem; 10, 20, 30, 40, 50 ou 60 segundos
+NOTIFICATION_SOUND_ENABLED=1
+NOTIFICATION_SOUND_INTERVAL=0
 ```
 
 Deixe uma variável vazia para desativar a plataforma.
@@ -235,6 +242,8 @@ Em `public/overlay.js`:
 |-----------|--------|-----------|
 | `OVERLAY_FONT_SIZE` (`.env`) | 22 | Fonte do overlay público (`/overlaypublico`) |
 | `OVERLAY_FONT_SIZE_FIXO` (`.env`) | 16 | Fonte do chat fixo do streamer (`/chatfixostremer`) |
+| `NOTIFICATION_SOUND_ENABLED` (`.env`) | 1 | Liga (`1`) ou desliga (`0`) o som de notificação |
+| `NOTIFICATION_SOUND_INTERVAL` (`.env`) | 0 | Intervalo mínimo entre sons (controle no servidor): `0` (a cada mensagem) ou `10`–`60` |
 | `MAX_MESSAGES` | 30 | Máximo de mensagens na tela |
 | `MESSAGE_LIFETIME_MS` | 60000 (1 min) | Tempo até sumir; 600000 (10 min) no `/chatfixostremer` |
 | `FADE_DURATION_MS` | 500 | Duração do fade ao remover |

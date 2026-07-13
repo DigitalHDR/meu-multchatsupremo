@@ -1,5 +1,6 @@
 require('dotenv').config();
 
+const fs = require('fs');
 const path = require('path');
 const http = require('http');
 const express = require('express');
@@ -9,7 +10,13 @@ const { connectTwitch } = require('./services/twitch');
 const { connectKick } = require('./services/kick');
 const { connectYouTube } = require('./services/youtube');
 const { parseTwitchChannel, parseKickChannel, parseYouTubeInput } = require('./utils/parse');
-const { readEnvFile, writeEnvFile, getPortsStatus, AVAILABLE_PORTS } = require('./utils/config');
+const {
+  readEnvFile,
+  writeEnvFile,
+  getPortsStatus,
+  AVAILABLE_PORTS,
+  normalizeSoundEnabled,
+} = require('./utils/config');
 
 const PORT = Number(process.env.PORT) || AVAILABLE_PORTS[0];
 const MAX_HISTORY = 50;
@@ -21,22 +28,76 @@ const wss = new WebSocketServer({ server });
 
 const clients = new Set();
 const history = [];
+let lastNotificationSoundAt = 0;
 
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
-app.use('/notification-som', express.static(path.join(__dirname, 'notification-som')));
+
+function getOverlayStyleConfig() {
+  const config = readEnvFile();
+  return {
+    OVERLAY_FONT_SIZE: config.OVERLAY_FONT_SIZE,
+    OVERLAY_FONT_SIZE_FIXO: config.OVERLAY_FONT_SIZE_FIXO,
+    NOTIFICATION_SOUND_ENABLED: config.NOTIFICATION_SOUND_ENABLED,
+    NOTIFICATION_SOUND_INTERVAL: config.NOTIFICATION_SOUND_INTERVAL,
+  };
+}
+
+function sendOverlayPage(res) {
+  const htmlPath = path.join(__dirname, 'public', 'overlay.html');
+  let html = fs.readFileSync(htmlPath, 'utf8');
+  const boot = JSON.stringify(getOverlayStyleConfig());
+  const cacheBust = Date.now();
+  html = html.replace(
+    '/*__MULTICHAT_STYLE_BOOTSTRAP__*/',
+    `window.__MULTICHAT_STYLE__=${boot};`
+  );
+  html = html.replace(
+    /src="\/overlay\.v\d+\.js"/,
+    `src="/overlay.v16.js?t=${cacheBust}"`
+  );
+  res.set({
+    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+    Pragma: 'no-cache',
+    Expires: '0',
+  });
+  res.type('html').send(html);
+}
 
 app.get('/overlaypublico', (_req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'overlay.html'));
+  sendOverlayPage(res);
 });
 
 app.get('/chatfixostremer', (_req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'overlay.html'));
+  sendOverlayPage(res);
 });
 
 app.get('/overlay', (_req, res) => {
   res.redirect('/overlaypublico');
 });
+
+app.get('/overlay.html', (_req, res) => {
+  res.redirect('/overlaypublico');
+});
+
+app.get(['/overlay.js', '/overlay.v16.js'], (_req, res) => {
+  res.set({
+    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+    Pragma: 'no-cache',
+    Expires: '0',
+  });
+  res.type('application/javascript').sendFile(path.join(__dirname, 'public', 'overlay.js'));
+});
+
+app.use(express.static(path.join(__dirname, 'public'), {
+  etag: false,
+  lastModified: false,
+  setHeaders(res, filePath) {
+    if (filePath.endsWith('.js') || filePath.endsWith('.html') || filePath.endsWith('.css')) {
+      res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+    }
+  },
+}));
+app.use('/notification-som', express.static(path.join(__dirname, 'notification-som')));
 
 app.get('/api/config', async (_req, res) => {
   try {
@@ -50,7 +111,19 @@ app.get('/api/config', async (_req, res) => {
 
 app.post('/api/config', async (req, res) => {
   try {
-    const { PORT: newPort, TWITCH_CHANNEL, KICK_CHANNEL, YOUTUBE_CHANNEL, YOUTUBE_VIDEO_ID, TWITCH_OAUTH, OVERLAY_FONT_SIZE, OVERLAY_FONT_SIZE_FIXO } = req.body;
+    const current = readEnvFile();
+    const {
+      PORT: newPort,
+      TWITCH_CHANNEL,
+      KICK_CHANNEL,
+      YOUTUBE_CHANNEL,
+      YOUTUBE_VIDEO_ID,
+      TWITCH_OAUTH,
+      OVERLAY_FONT_SIZE,
+      OVERLAY_FONT_SIZE_FIXO,
+      NOTIFICATION_SOUND_ENABLED,
+      NOTIFICATION_SOUND_INTERVAL,
+    } = req.body;
 
     const saved = writeEnvFile({
       PORT: String(newPort || PORT),
@@ -59,8 +132,10 @@ app.post('/api/config', async (req, res) => {
       YOUTUBE_CHANNEL: YOUTUBE_CHANNEL ?? '',
       YOUTUBE_VIDEO_ID: YOUTUBE_VIDEO_ID ?? '',
       TWITCH_OAUTH: TWITCH_OAUTH ?? '',
-      OVERLAY_FONT_SIZE: OVERLAY_FONT_SIZE ?? readEnvFile().OVERLAY_FONT_SIZE,
-      OVERLAY_FONT_SIZE_FIXO: OVERLAY_FONT_SIZE_FIXO ?? readEnvFile().OVERLAY_FONT_SIZE_FIXO,
+      OVERLAY_FONT_SIZE: OVERLAY_FONT_SIZE ?? current.OVERLAY_FONT_SIZE,
+      OVERLAY_FONT_SIZE_FIXO: OVERLAY_FONT_SIZE_FIXO ?? current.OVERLAY_FONT_SIZE_FIXO,
+      NOTIFICATION_SOUND_ENABLED: NOTIFICATION_SOUND_ENABLED ?? current.NOTIFICATION_SOUND_ENABLED,
+      NOTIFICATION_SOUND_INTERVAL: NOTIFICATION_SOUND_INTERVAL ?? current.NOTIFICATION_SOUND_INTERVAL,
     });
 
     const portChanged = Number(saved.PORT) !== PORT;
@@ -81,12 +156,21 @@ app.post('/api/config', async (req, res) => {
 app.patch('/api/overlay-appearance', (req, res) => {
   try {
     const current = readEnvFile();
-    const { OVERLAY_FONT_SIZE, OVERLAY_FONT_SIZE_FIXO } = req.body || {};
+    const {
+      OVERLAY_FONT_SIZE,
+      OVERLAY_FONT_SIZE_FIXO,
+      NOTIFICATION_SOUND_ENABLED,
+      NOTIFICATION_SOUND_INTERVAL,
+    } = req.body || {};
     const saved = writeEnvFile({
       ...current,
       OVERLAY_FONT_SIZE: OVERLAY_FONT_SIZE ?? current.OVERLAY_FONT_SIZE,
       OVERLAY_FONT_SIZE_FIXO: OVERLAY_FONT_SIZE_FIXO ?? current.OVERLAY_FONT_SIZE_FIXO,
+      NOTIFICATION_SOUND_ENABLED: NOTIFICATION_SOUND_ENABLED ?? current.NOTIFICATION_SOUND_ENABLED,
+      NOTIFICATION_SOUND_INTERVAL: NOTIFICATION_SOUND_INTERVAL ?? current.NOTIFICATION_SOUND_INTERVAL,
     });
+    // Permite testar o novo intervalo imediatamente
+    lastNotificationSoundAt = 0;
     broadcastOverlayStyle();
     res.json({ ok: true, config: saved });
   } catch (err) {
@@ -126,16 +210,22 @@ function broadcast(message) {
   }
 }
 
-function getOverlayStyleConfig() {
-  const config = readEnvFile();
-  return {
-    OVERLAY_FONT_SIZE: config.OVERLAY_FONT_SIZE,
-    OVERLAY_FONT_SIZE_FIXO: config.OVERLAY_FONT_SIZE_FIXO,
-  };
-}
-
 function broadcastOverlayStyle() {
   broadcast({ type: 'style', data: getOverlayStyleConfig() });
+}
+
+function canPlayNotificationSoundNow() {
+  const config = readEnvFile();
+  if (normalizeSoundEnabled(config.NOTIFICATION_SOUND_ENABLED) !== '1') return false;
+
+  const intervalSec = Number(config.NOTIFICATION_SOUND_INTERVAL);
+  const gapMs = (Number.isFinite(intervalSec) ? intervalSec : 0) * 1000;
+  const now = Date.now();
+
+  if (gapMs > 0 && now - lastNotificationSoundAt < gapMs) return false;
+
+  lastNotificationSoundAt = now;
+  return true;
 }
 
 function pruneHistory() {
@@ -151,17 +241,21 @@ function getActiveHistory() {
 }
 
 function handleChatMessage(msg) {
-  history.push(msg);
+  const playSound = canPlayNotificationSoundNow();
+  const payload = { ...msg, playSound };
+
+  history.push(payload);
   pruneHistory();
   if (history.length > MAX_HISTORY) {
     history.shift();
   }
-  broadcast({ type: 'message', data: msg });
+  broadcast({ type: 'message', data: payload });
 }
 
 wss.on('connection', (ws) => {
   clients.add(ws);
-  ws.send(JSON.stringify({ type: 'history', data: getActiveHistory() }));
+  const hist = getActiveHistory().map((msg) => ({ ...msg, playSound: false }));
+  ws.send(JSON.stringify({ type: 'history', data: hist }));
   ws.send(JSON.stringify({ type: 'style', data: getOverlayStyleConfig() }));
   ws.on('close', () => clients.delete(ws));
 });

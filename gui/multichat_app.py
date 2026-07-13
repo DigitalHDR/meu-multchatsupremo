@@ -17,6 +17,8 @@ from PySide6.QtWidgets import (
     QApplication,
     QAbstractSpinBox,
     QButtonGroup,
+    QCheckBox,
+    QComboBox,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -25,6 +27,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QRadioButton,
+    QScrollArea,
     QSizePolicy,
     QSpinBox,
     QVBoxLayout,
@@ -38,6 +41,9 @@ FONT_SIZE_MIN = 10
 FONT_SIZE_MAX = 36
 FONT_SIZE_DEFAULT = 22
 FONT_SIZE_FIXO_DEFAULT = 16
+SOUND_INTERVALS = [0, 10, 20, 30, 40, 50, 60]
+SOUND_ENABLED_DEFAULT = True
+SOUND_INTERVAL_DEFAULT = 0
 
 CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
@@ -50,6 +56,8 @@ DEFAULT_ENV = {
     "TWITCH_OAUTH": "",
     "OVERLAY_FONT_SIZE": "22",
     "OVERLAY_FONT_SIZE_FIXO": "16",
+    "NOTIFICATION_SOUND_ENABLED": "1",
+    "NOTIFICATION_SOUND_INTERVAL": "0",
 }
 
 ROW_GAP = 12
@@ -230,12 +238,94 @@ QRadioButton::indicator:disabled {{
     border: 2px solid #4b5563;
     background-color: #2a2f38;
 }}
+QCheckBox {{
+    spacing: 10px;
+    color: {COLOR_TEXT};
+    background: transparent;
+}}
+QCheckBox::indicator {{
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+}}
+QCheckBox::indicator:unchecked {{
+    border: 2px solid #c5cad3;
+    background-color: {COLOR_BG_INPUT};
+}}
+QCheckBox::indicator:unchecked:hover {{
+    border: 2px solid #ffffff;
+}}
+QCheckBox::indicator:checked {{
+    border: 2px solid {COLOR_ACCENT};
+    background-color: {COLOR_ACCENT};
+}}
+QCheckBox:disabled {{
+    color: #6b7280;
+}}
+QComboBox {{
+    border: 1px solid {COLOR_BORDER};
+    border-radius: 6px;
+    padding: 6px 10px;
+    background-color: {COLOR_BG_INPUT};
+    color: {COLOR_TEXT};
+    min-height: 22px;
+}}
+QComboBox:hover {{
+    border-color: {COLOR_BORDER_FOCUS};
+}}
+QComboBox:focus {{
+    border: 1px solid {COLOR_BORDER_FOCUS};
+}}
+QComboBox:disabled {{
+    color: {COLOR_TEXT_MUTED};
+    background-color: {COLOR_BG_INPUT_RO};
+}}
+QComboBox::drop-down {{
+    border: none;
+    width: 28px;
+}}
+QComboBox QAbstractItemView {{
+    background-color: {COLOR_BG_INPUT};
+    color: {COLOR_TEXT};
+    border: 1px solid {COLOR_BORDER};
+    selection-background-color: {COLOR_ACCENT};
+    selection-color: #ffffff;
+}}
 QLabel#status_ok {{ color: #4ade80; font-weight: 600; background: transparent; }}
 QLabel#status_err {{ color: #f87171; font-weight: 600; background: transparent; }}
 QLabel#status_idle {{ color: {COLOR_TEXT_MUTED}; background: transparent; }}
 QLabel#port_free {{ color: #4ade80; font-size: 11px; background: transparent; }}
 QLabel#port_busy {{ color: #f87171; font-size: 11px; background: transparent; }}
 QLabel#port_active {{ color: #60a5fa; font-size: 11px; background: transparent; }}
+QScrollArea {{
+    border: none;
+    background-color: {COLOR_BG};
+}}
+QScrollArea > QWidget > QWidget {{
+    background-color: {COLOR_BG};
+}}
+QScrollBar:vertical {{
+    background: {COLOR_BG};
+    width: 12px;
+    margin: 0;
+    border: none;
+}}
+QScrollBar::handle:vertical {{
+    background: {COLOR_BORDER};
+    min-height: 36px;
+    border-radius: 6px;
+    margin: 2px;
+}}
+QScrollBar::handle:vertical:hover {{
+    background: #5a6270;
+}}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+    height: 0;
+    background: none;
+}}
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
+    background: none;
+}}
 """
 
 
@@ -256,6 +346,19 @@ def read_env() -> dict:
     return cfg
 
 
+def parse_sound_enabled(value) -> bool:
+    raw = str(value if value is not None else "1").strip().lower()
+    return raw not in {"0", "false", "off", "no", "nao", "não"}
+
+
+def parse_sound_interval(value) -> int:
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return SOUND_INTERVAL_DEFAULT
+    return n if n in SOUND_INTERVALS else SOUND_INTERVAL_DEFAULT
+
+
 def write_env(cfg: dict) -> None:
     port = str(cfg.get("PORT", "3847"))
     if int(port) not in PORTS:
@@ -267,6 +370,9 @@ def write_env(cfg: dict) -> None:
         raise ValueError(f"Tamanho da fonte invalido. Use entre {FONT_SIZE_MIN} e {FONT_SIZE_MAX}px.")
     if font_size_fixo < FONT_SIZE_MIN or font_size_fixo > FONT_SIZE_MAX:
         raise ValueError(f"Tamanho da fonte do chat fixo invalido. Use entre {FONT_SIZE_MIN} e {FONT_SIZE_MAX}px.")
+
+    sound_enabled = "1" if parse_sound_enabled(cfg.get("NOTIFICATION_SOUND_ENABLED", "1")) else "0"
+    sound_interval = parse_sound_interval(cfg.get("NOTIFICATION_SOUND_INTERVAL", str(SOUND_INTERVAL_DEFAULT)))
 
     content = f"""# Porta do servidor local
 PORT={port}
@@ -285,6 +391,10 @@ TWITCH_OAUTH={cfg.get('TWITCH_OAUTH', '')}
 # Aparencia do overlay
 OVERLAY_FONT_SIZE={font_size}
 OVERLAY_FONT_SIZE_FIXO={font_size_fixo}
+
+# Som de notificacao (0 = a cada mensagem; 10-60 = intervalo minimo em segundos)
+NOTIFICATION_SOUND_ENABLED={sound_enabled}
+NOTIFICATION_SOUND_INTERVAL={sound_interval}
 """
     ENV_PATH.write_text(content, encoding="utf-8")
 
@@ -350,7 +460,8 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Meu Multichat")
-        self.setFixedSize(520, 900)
+        self.setMinimumSize(520, 640)
+        self.resize(540, 760)
         self.port_radios: dict[int, QRadioButton] = {}
         self.port_status_labels: dict[int, QLabel] = {}
         self._server_proc: subprocess.Popen | None = None
@@ -367,7 +478,7 @@ class MainWindow(QMainWindow):
         self._font_save_timer = QTimer(self)
         self._font_save_timer.setSingleShot(True)
         self._font_save_timer.setInterval(350)
-        self._font_save_timer.timeout.connect(self._save_font_sizes_live)
+        self._font_save_timer.timeout.connect(self._save_appearance_live)
 
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._on_timer)
@@ -513,11 +624,23 @@ class MainWindow(QMainWindow):
         return block
 
     def _build_ui(self):
-        central = QWidget()
-        self.setCentralWidget(central)
-        layout = QVBoxLayout(central)
-        layout.setContentsMargins(20, 16, 20, 16)
+        scroll = QScrollArea()
+        scroll.setObjectName("main_scroll")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.setCentralWidget(scroll)
+
+        form = QWidget()
+        form.setObjectName("main_form")
+        form.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        scroll.setWidget(form)
+
+        layout = QVBoxLayout(form)
+        layout.setContentsMargins(20, 16, 28, 16)
         layout.setSpacing(14)
+        layout.setSizeConstraint(QVBoxLayout.SizeConstraint.SetMinimumSize)
 
         title = QLabel("Configuracao do Multichat")
         title.setFont(QFont("Segoe UI", 16, QFont.Weight.DemiBold))
@@ -569,9 +692,39 @@ class MainWindow(QMainWindow):
 
         appearance_layout.addWidget(font_public_row)
         appearance_layout.addWidget(font_fixo_row)
-        self.font_size.valueChanged.connect(self._schedule_font_save)
-        self.font_size_fixo.valueChanged.connect(self._schedule_font_save)
+        self.font_size.valueChanged.connect(self._schedule_appearance_save)
+        self.font_size_fixo.valueChanged.connect(self._schedule_appearance_save)
         layout.addWidget(grp_appearance)
+
+        grp_notification = QGroupBox("Notificacao")
+        notification_layout = QVBoxLayout(grp_notification)
+        notification_layout.setContentsMargins(14, GROUP_INNER_TOP, 14, 14)
+        notification_layout.setSpacing(ROW_GAP)
+
+        self.sound_enabled = QCheckBox("Ativar som de notificacao")
+        self.sound_enabled.setChecked(SOUND_ENABLED_DEFAULT)
+        self.sound_enabled.toggled.connect(self._on_sound_enabled_toggled)
+
+        self.sound_interval = QComboBox()
+        self.sound_interval.setFixedHeight(FIELD_HEIGHT)
+        self.sound_interval.setMinimumWidth(180)
+        for seconds in SOUND_INTERVALS:
+            if seconds == 0:
+                self.sound_interval.addItem("A cada mensagem", 0)
+            else:
+                self.sound_interval.addItem(f"{seconds} segundos", seconds)
+        self.sound_interval.setCurrentIndex(0)
+        self.sound_interval.currentIndexChanged.connect(self._schedule_appearance_save)
+
+        interval_row = QWidget()
+        interval_row.setObjectName("space-between-row")
+        interval_row.setLayout(
+            self._space_between_row("Intervalo minimo:", self.sound_interval, input_width=180)
+        )
+
+        notification_layout.addWidget(self.sound_enabled)
+        notification_layout.addWidget(interval_row)
+        layout.addWidget(grp_notification)
 
         # Portas
         grp_port = QGroupBox("Porta do servidor")
@@ -661,6 +814,7 @@ class MainWindow(QMainWindow):
         hint.setObjectName("subtitle")
         hint.setWordWrap(True)
         layout.addWidget(hint)
+        layout.addStretch(0)
 
     def _selected_port(self) -> int:
         for port, rb in self.port_radios.items():
@@ -673,25 +827,37 @@ class MainWindow(QMainWindow):
         self.url_normal.setText(f"http://localhost:{port}/overlaypublico")
         self.url_fixo.setText(f"http://localhost:{port}/chatfixostremer")
 
-    def _schedule_font_save(self) -> None:
+    def _schedule_appearance_save(self) -> None:
         self._font_save_timer.start()
 
-    def _save_font_sizes_live(self) -> None:
+    def _on_sound_enabled_toggled(self, enabled: bool) -> None:
+        self.sound_interval.setEnabled(enabled)
+        self._schedule_appearance_save()
+
+    def _selected_sound_interval(self) -> int:
+        value = self.sound_interval.currentData()
+        return parse_sound_interval(value)
+
+    def _save_appearance_live(self) -> None:
         cfg = read_env()
         cfg["OVERLAY_FONT_SIZE"] = str(self.font_size.value())
         cfg["OVERLAY_FONT_SIZE_FIXO"] = str(self.font_size_fixo.value())
+        cfg["NOTIFICATION_SOUND_ENABLED"] = "1" if self.sound_enabled.isChecked() else "0"
+        cfg["NOTIFICATION_SOUND_INTERVAL"] = str(self._selected_sound_interval())
         try:
             write_env(cfg)
         except Exception:
             return
-        self._push_font_sizes_to_server()
+        self._push_appearance_to_server()
 
-    def _push_font_sizes_to_server(self) -> None:
+    def _push_appearance_to_server(self) -> None:
         port = self._selected_port()
         body = json.dumps(
             {
                 "OVERLAY_FONT_SIZE": str(self.font_size.value()),
                 "OVERLAY_FONT_SIZE_FIXO": str(self.font_size_fixo.value()),
+                "NOTIFICATION_SOUND_ENABLED": "1" if self.sound_enabled.isChecked() else "0",
+                "NOTIFICATION_SOUND_INTERVAL": str(self._selected_sound_interval()),
             }
         ).encode("utf-8")
         req = urllib.request.Request(
@@ -727,6 +893,17 @@ class MainWindow(QMainWindow):
         self.font_size_fixo.blockSignals(True)
         self.font_size_fixo.setValue(max(FONT_SIZE_MIN, min(FONT_SIZE_MAX, font_size_fixo)))
         self.font_size_fixo.blockSignals(False)
+
+        sound_on = parse_sound_enabled(cfg.get("NOTIFICATION_SOUND_ENABLED", "1"))
+        sound_interval = parse_sound_interval(cfg.get("NOTIFICATION_SOUND_INTERVAL", str(SOUND_INTERVAL_DEFAULT)))
+        self.sound_enabled.blockSignals(True)
+        self.sound_enabled.setChecked(sound_on)
+        self.sound_enabled.blockSignals(False)
+        self.sound_interval.blockSignals(True)
+        idx = self.sound_interval.findData(sound_interval)
+        self.sound_interval.setCurrentIndex(idx if idx >= 0 else 0)
+        self.sound_interval.setEnabled(sound_on)
+        self.sound_interval.blockSignals(False)
 
         port = int(cfg.get("PORT", "3847"))
         if port in self.port_radios:
@@ -789,6 +966,8 @@ class MainWindow(QMainWindow):
                 "YOUTUBE_VIDEO_ID": self.yt_video.text().strip(),
                 "OVERLAY_FONT_SIZE": str(self.font_size.value()),
                 "OVERLAY_FONT_SIZE_FIXO": str(self.font_size_fixo.value()),
+                "NOTIFICATION_SOUND_ENABLED": "1" if self.sound_enabled.isChecked() else "0",
+                "NOTIFICATION_SOUND_INTERVAL": str(self._selected_sound_interval()),
             }
         )
         return cfg
@@ -800,7 +979,7 @@ class MainWindow(QMainWindow):
             QMessageBox.information(
                 self,
                 "Meu Multichat",
-                "Configuracao salva!\n\nReinicie o servidor (Parar + Iniciar) para aplicar canais e porta.\nOs tamanhos de fonte atualizam no overlay em ate 10 segundos.",
+                "Configuracao salva!\n\nReinicie o servidor (Parar + Iniciar) para aplicar canais e porta.\nFonte e notificacao atualizam no overlay em ate 10 segundos.",
             )
         except Exception as e:
             QMessageBox.critical(self, "Erro", str(e))
