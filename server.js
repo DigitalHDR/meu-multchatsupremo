@@ -9,8 +9,9 @@ const { connectTwitch } = require('./services/twitch');
 const { connectKick } = require('./services/kick');
 const { connectYouTube } = require('./services/youtube');
 const { parseTwitchChannel, parseKickChannel, parseYouTubeInput } = require('./utils/parse');
+const { readEnvFile, writeEnvFile, getPortsStatus, AVAILABLE_PORTS } = require('./utils/config');
 
-const PORT = process.env.PORT || 3847;
+const PORT = Number(process.env.PORT) || AVAILABLE_PORTS[0];
 const MAX_HISTORY = 50;
 const HISTORY_TTL_MS = 60_000;
 
@@ -21,14 +22,81 @@ const wss = new WebSocketServer({ server });
 const clients = new Set();
 const history = [];
 
+app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/notification-som', express.static(path.join(__dirname, 'notification-som')));
+
+app.get('/overlaypublico', (_req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'overlay.html'));
+});
+
+app.get('/chatfixostremer', (_req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'overlay.html'));
+});
 
 app.get('/overlay', (_req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'overlay.html'));
+  res.redirect('/overlaypublico');
+});
+
+app.get('/api/config', async (_req, res) => {
+  try {
+    const config = readEnvFile();
+    const ports = await getPortsStatus(PORT);
+    res.json({ config, ports, availablePorts: AVAILABLE_PORTS });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/config', async (req, res) => {
+  try {
+    const { PORT: newPort, TWITCH_CHANNEL, KICK_CHANNEL, YOUTUBE_CHANNEL, YOUTUBE_VIDEO_ID, TWITCH_OAUTH, OVERLAY_FONT_SIZE, OVERLAY_FONT_SIZE_FIXO } = req.body;
+
+    const saved = writeEnvFile({
+      PORT: String(newPort || PORT),
+      TWITCH_CHANNEL: TWITCH_CHANNEL ?? '',
+      KICK_CHANNEL: KICK_CHANNEL ?? '',
+      YOUTUBE_CHANNEL: YOUTUBE_CHANNEL ?? '',
+      YOUTUBE_VIDEO_ID: YOUTUBE_VIDEO_ID ?? '',
+      TWITCH_OAUTH: TWITCH_OAUTH ?? '',
+      OVERLAY_FONT_SIZE: OVERLAY_FONT_SIZE ?? readEnvFile().OVERLAY_FONT_SIZE,
+      OVERLAY_FONT_SIZE_FIXO: OVERLAY_FONT_SIZE_FIXO ?? readEnvFile().OVERLAY_FONT_SIZE_FIXO,
+    });
+
+    const portChanged = Number(saved.PORT) !== PORT;
+    broadcastOverlayStyle();
+    res.json({
+      ok: true,
+      config: saved,
+      restartRequired: portChanged,
+      message: portChanged
+        ? 'Configuração salva! Reinicie o servidor (feche e abra o iniciar.bat) para aplicar a nova porta.'
+        : 'Configuração salva! Reinicie o servidor para reconectar aos canais.',
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.patch('/api/overlay-appearance', (req, res) => {
+  try {
+    const current = readEnvFile();
+    const { OVERLAY_FONT_SIZE, OVERLAY_FONT_SIZE_FIXO } = req.body || {};
+    const saved = writeEnvFile({
+      ...current,
+      OVERLAY_FONT_SIZE: OVERLAY_FONT_SIZE ?? current.OVERLAY_FONT_SIZE,
+      OVERLAY_FONT_SIZE_FIXO: OVERLAY_FONT_SIZE_FIXO ?? current.OVERLAY_FONT_SIZE_FIXO,
+    });
+    broadcastOverlayStyle();
+    res.json({ ok: true, config: saved });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 app.get('/api/status', (_req, res) => {
   res.json({
+    port: PORT,
     twitch: parseTwitchChannel(process.env.TWITCH_CHANNEL) || null,
     kick: parseKickChannel(process.env.KICK_CHANNEL) || null,
     youtube: parseYouTubeInput(process.env.YOUTUBE_VIDEO_ID, process.env.YOUTUBE_CHANNEL) || null,
@@ -58,6 +126,18 @@ function broadcast(message) {
   }
 }
 
+function getOverlayStyleConfig() {
+  const config = readEnvFile();
+  return {
+    OVERLAY_FONT_SIZE: config.OVERLAY_FONT_SIZE,
+    OVERLAY_FONT_SIZE_FIXO: config.OVERLAY_FONT_SIZE_FIXO,
+  };
+}
+
+function broadcastOverlayStyle() {
+  broadcast({ type: 'style', data: getOverlayStyleConfig() });
+}
+
 function pruneHistory() {
   const cutoff = Date.now() - HISTORY_TTL_MS;
   while (history.length > 0 && history[0].timestamp < cutoff) {
@@ -81,13 +161,11 @@ function handleChatMessage(msg) {
 
 wss.on('connection', (ws) => {
   clients.add(ws);
-
   ws.send(JSON.stringify({ type: 'history', data: getActiveHistory() }));
-
+  ws.send(JSON.stringify({ type: 'style', data: getOverlayStyleConfig() }));
   ws.on('close', () => clients.delete(ws));
 });
 
-// Conectar plataformas configuradas
 const twitchChannel = parseTwitchChannel(process.env.TWITCH_CHANNEL);
 const kickChannel = parseKickChannel(process.env.KICK_CHANNEL);
 const youtubeInput = parseYouTubeInput(
@@ -121,8 +199,9 @@ server.listen(PORT, () => {
   console.log('  ╔══════════════════════════════════════════════╗');
   console.log('  ║         MEU MULTICHAT — OBS Overlay          ║');
   console.log('  ╠══════════════════════════════════════════════╣');
-  console.log(`  ║  Overlay OBS:  http://localhost:${PORT}/overlay`);
-  console.log(`  ║  Painel:        http://localhost:${PORT}/`);
+  console.log(`  ║  Configuração: http://localhost:${PORT}/`);
+  console.log(`  ║  Overlay publico: http://localhost:${PORT}/overlaypublico`);
+  console.log(`  ║  Chat fixo:       http://localhost:${PORT}/chatfixostremer`);
   console.log('  ╚══════════════════════════════════════════════╝');
   console.log('');
 });
@@ -131,11 +210,8 @@ server.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
     console.error('');
     console.error(`  [ERRO] A porta ${PORT} já está em uso.`);
-    console.error('  O servidor já está rodando, ou outro programa usa essa porta.');
-    console.error('');
-    console.error('  Soluções:');
-    console.error('  • Use o overlay: http://localhost:' + PORT + '/overlay');
-    console.error('  • Ou execute parar.bat e inicie de novo');
+    console.error(`  Portas disponíveis: ${AVAILABLE_PORTS.join(', ')}`);
+    console.error('  Abra o painel em outra porta ou execute parar.bat e tente de novo.');
     console.error('');
     process.exit(1);
   }

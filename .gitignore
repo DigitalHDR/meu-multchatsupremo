@@ -1,6 +1,13 @@
 node_modules/
 .env
 *.log
+__pycache__/
+*.pyc
+
+# Arquivo de pacotes (muito grande para git - gere com npm run arquivar-pacotes)
+pacotes/npm/**/*.tgz
+pacotes/python/**/*.whl
+pacotes/python/**/*.tar.gz
 
 # pastas git aninhadas acidentais
 meu-chat-universal/

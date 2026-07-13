@@ -3,128 +3,80 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Meu Multichat — Painel</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: 'Segoe UI', system-ui, sans-serif;
-      background: #0f0f13;
-      color: #e8e8ef;
-      min-height: 100vh;
-      padding: 2rem;
-    }
-    .container { max-width: 720px; margin: 0 auto; }
-    h1 { font-size: 1.75rem; margin-bottom: 0.25rem; }
-    .subtitle { color: #888; margin-bottom: 2rem; }
-    .card {
-      background: #1a1a22;
-      border: 1px solid #2a2a35;
-      border-radius: 12px;
-      padding: 1.5rem;
-      margin-bottom: 1.25rem;
-    }
-    h2 { font-size: 1rem; margin-bottom: 1rem; color: #aaa; text-transform: uppercase; letter-spacing: 0.05em; }
-    .url-box {
-      display: flex;
-      gap: 0.5rem;
-      align-items: center;
-      background: #0a0a0f;
-      border: 1px solid #333;
-      border-radius: 8px;
-      padding: 0.75rem 1rem;
-      font-family: monospace;
-      font-size: 0.95rem;
-      word-break: break-all;
-    }
-    .url-box span { flex: 1; color: #53FC18; }
-    button {
-      background: #9146FF;
-      color: white;
-      border: none;
-      border-radius: 6px;
-      padding: 0.5rem 1rem;
-      cursor: pointer;
-      font-size: 0.85rem;
-      white-space: nowrap;
-    }
-    button:hover { opacity: 0.9; }
-    .steps { list-style: none; counter-reset: step; }
-    .steps li {
-      counter-increment: step;
-      padding: 0.75rem 0;
-      border-bottom: 1px solid #2a2a35;
-      padding-left: 2rem;
-      position: relative;
-      line-height: 1.5;
-    }
-    .steps li:last-child { border-bottom: none; }
-    .steps li::before {
-      content: counter(step);
-      position: absolute;
-      left: 0;
-      width: 1.4rem;
-      height: 1.4rem;
-      background: #2a2a35;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 0.75rem;
-      font-weight: bold;
-    }
-    .status-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; }
-    .status-item {
-      background: #0a0a0f;
-      border-radius: 8px;
-      padding: 1rem;
-      text-align: center;
-    }
-    .status-item .platform { font-size: 0.75rem; color: #888; margin-bottom: 0.25rem; }
-    .status-item .value { font-size: 0.9rem; font-weight: 600; }
-    .status-item.twitch .value { color: #9146FF; }
-    .status-item.kick .value { color: #53FC18; }
-    .status-item.youtube .value { color: #FF4444; }
-    .badge {
-      display: inline-block;
-      padding: 0.15rem 0.5rem;
-      border-radius: 4px;
-      font-size: 0.7rem;
-      font-weight: 600;
-      margin-top: 0.35rem;
-    }
-    .badge.on { background: #1a3d1a; color: #4ade80; }
-    .badge.off { background: #3d1a1a; color: #f87171; }
-    code { background: #0a0a0f; padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.85rem; }
-    .preview-link {
-      display: inline-block;
-      margin-top: 1rem;
-      color: #9146FF;
-      text-decoration: none;
-    }
-    .preview-link:hover { text-decoration: underline; }
-  </style>
+  <title>Meu Multichat — Configuração</title>
+  <link rel="stylesheet" href="/panel.css" />
 </head>
 <body>
   <div class="container">
-    <h1>Meu Multichat</h1>
-    <p class="subtitle">Overlay de chat para OBS Studio</p>
+    <header class="header">
+      <div>
+        <h1>Meu Multichat</h1>
+        <p class="subtitle">Configure canais, porta e overlay do OBS</p>
+      </div>
+      <div class="header-actions">
+        <a class="btn btn-ghost" href="/overlaypublico?preview=1" target="_blank">Preview</a>
+        <a class="btn btn-ghost" href="/overlaypublico?preview=1&demo=1" target="_blank">Demo</a>
+      </div>
+    </header>
+
+    <div id="toast" class="toast hidden"></div>
+
+    <form id="config-form" class="card">
+      <h2>Configuração dos canais</h2>
+
+      <div class="field">
+        <label for="twitch">Twitch — nome do canal</label>
+        <input type="text" id="twitch" name="TWITCH_CHANNEL" placeholder="mirainextcode ou https://twitch.tv/mirainextcode" />
+      </div>
+
+      <div class="field">
+        <label for="kick">Kick — nome do canal</label>
+        <input type="text" id="kick" name="KICK_CHANNEL" placeholder="mirainextcode ou https://kick.com/mirainextcode" />
+      </div>
+
+      <div class="field">
+        <label for="youtube-channel">YouTube — canal (busca live automaticamente)</label>
+        <input type="text" id="youtube-channel" name="YOUTUBE_CHANNEL" placeholder="@mirainextcode" />
+      </div>
+
+      <div class="field">
+        <label for="youtube-video">YouTube — ID do vídeo ao vivo (opcional)</label>
+        <input type="text" id="youtube-video" name="YOUTUBE_VIDEO_ID" placeholder="iRg44pNXxto ou URL do Studio/YouTube" />
+        <span class="hint">Use o canal OU o ID do vídeo. Se os dois estiverem preenchidos, o ID do vídeo tem prioridade.</span>
+      </div>
+
+      <div class="field">
+        <label>Porta do servidor</label>
+        <span class="hint">Escolha uma das portas fixas. Verde = livre · Vermelho = em uso por outro programa</span>
+        <div class="port-grid" id="port-grid"></div>
+      </div>
+
+      <div class="field">
+        <label for="oauth">Twitch OAuth (opcional)</label>
+        <input type="text" id="oauth" name="TWITCH_OAUTH" placeholder="Token com escopo chat:read" />
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Salvar configuração</button>
+        <button type="button" class="btn btn-secondary" id="btn-test">Mensagem de teste</button>
+      </div>
+
+      <p class="restart-note" id="restart-note">
+        Após salvar, reinicie o servidor (feche e abra o <strong>iniciar.bat</strong>) para aplicar as mudanças.
+      </p>
+    </form>
 
     <div class="card">
       <h2>URL para o OBS</h2>
       <div class="url-box">
-        <span id="overlay-url">http://localhost:3847/overlay</span>
-        <button onclick="copyUrl()">Copiar</button>
-      </div>
-      <a class="preview-link" href="/overlay?preview=1" target="_blank">Abrir preview do overlay →</a>
-      <div style="margin-top: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
-        <button onclick="sendTestMessage()">Enviar mensagem de teste</button>
-        <button onclick="window.open('/overlay?preview=1&demo=1', '_blank')" style="background:#333">Ver demo com exemplos</button>
+        <span id="overlay-url">http://localhost:3847/overlaypublico</span>
+        <button type="button" class="btn btn-primary" id="btn-copy">Copiar</button>
       </div>
     </div>
 
     <div class="card">
       <h2>Status das plataformas</h2>
-      <div class="status-grid" id="status-grid">
+      <div class="status-grid">
         <div class="status-item twitch">
           <div class="platform">Twitch</div>
           <div class="value" id="st-twitch">—</div>
@@ -139,61 +91,8 @@
         </div>
       </div>
     </div>
-
-    <div class="card">
-      <h2>Como configurar no OBS</h2>
-      <ol class="steps">
-        <li>Copie o arquivo <code>.env.example</code> para <code>.env</code> e preencha seus canais.</li>
-        <li>Execute <code>npm start</code> na pasta do projeto.</li>
-        <li>No OBS: <strong>Fontes → + → Navegador (Browser Source)</strong>.</li>
-        <li>Cole a URL acima. Defina largura <strong>400</strong> e altura <strong>600</strong> (ajuste como quiser).</li>
-        <li>Marque <strong>"Desativar origem quando não visível"</strong> para economizar recursos.</li>
-        <li>O fundo é transparente — o chat aparece sobre sua cena.</li>
-      </ol>
-    </div>
   </div>
 
-  <script>
-    const port = location.port || '3847';
-    document.getElementById('overlay-url').textContent =
-      `${location.protocol}//${location.hostname}:${port}/overlay`;
-
-    function copyUrl() {
-      const url = document.getElementById('overlay-url').textContent;
-      navigator.clipboard.writeText(url);
-      event.target.textContent = 'Copiado!';
-      setTimeout(() => { event.target.textContent = 'Copiar'; }, 2000);
-    }
-
-    async function loadStatus() {
-      try {
-        const res = await fetch('/api/status');
-        const data = await res.json();
-
-        setStatus('st-twitch', data.twitch, 'Twitch');
-        setStatus('st-kick', data.kick, 'Kick');
-        setStatus('st-youtube', data.youtube, 'YouTube');
-      } catch {
-        // servidor offline
-      }
-    }
-
-    function setStatus(id, channel, name) {
-      const el = document.getElementById(id);
-      if (channel) {
-        el.innerHTML = `${channel}<br><span class="badge on">Ativo</span>`;
-      } else {
-        el.innerHTML = `Não configurado<br><span class="badge off">Inativo</span>`;
-      }
-    }
-
-    loadStatus();
-    setInterval(loadStatus, 10000);
-
-    async function sendTestMessage() {
-      await fetch('/api/test-message');
-      alert('Mensagem de teste enviada! Abra o overlay para ver.');
-    }
-  </script>
+  <script src="/panel.js"></script>
 </body>
 </html>

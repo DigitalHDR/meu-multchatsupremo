@@ -1,12 +1,19 @@
 const params = new URLSearchParams(location.search);
-const isPreview = params.has('preview');
+const pathBase = location.pathname.replace(/\/$/, '');
+const isChatFixoStreamer = pathBase.endsWith('/chatfixostremer');
+const isPreview = params.has('preview') || isChatFixoStreamer;
 const isDemo = params.has('demo');
+const isObsChatFixo = isChatFixoStreamer || params.has('obschatfixo');
+const soundEnabled = params.get('sound') !== '0';
 
-const MESSAGE_LIFETIME_MS = isDemo ? 600000 : 60000; // demo: 10 min | overlay: 1 min
+const MESSAGE_LIFETIME_MS = (isDemo || isObsChatFixo) ? 600000 : 60000;
 const MAX_MESSAGES = 30;
 const FADE_DURATION_MS = 500;
 
 const messageTimers = new WeakMap();
+
+const NOTIFICATION_SOUND_URL = '/notification-som/notification.mp3';
+let notificationAudioTemplate = null;
 
 const PLATFORM_LABELS = {
   twitch: 'TW',
@@ -21,6 +28,55 @@ const statusDot = document.getElementById('status-dot');
 
 if (isPreview) {
   document.body.classList.add('preview-mode');
+}
+
+const MIN_FONT_SIZE = 10;
+const MAX_FONT_SIZE = 36;
+let appliedFontSize = null;
+
+function applyFontSize(size) {
+  const px = Number(size);
+  if (!Number.isFinite(px) || px < MIN_FONT_SIZE || px > MAX_FONT_SIZE) return;
+  if (px === appliedFontSize) return;
+  appliedFontSize = px;
+  document.documentElement.style.setProperty('--chat-font-size', `${px}px`);
+}
+
+function applyStyleFromConfig(config) {
+  if (!config) return;
+  const size = isObsChatFixo ? config.OVERLAY_FONT_SIZE_FIXO : config.OVERLAY_FONT_SIZE;
+  applyFontSize(size);
+}
+
+async function loadOverlayFontSize() {
+  try {
+    const res = await fetch('/api/config');
+    const data = await res.json();
+    applyStyleFromConfig(data.config);
+  } catch {
+    applyFontSize(isObsChatFixo ? 16 : 22);
+  }
+}
+
+loadOverlayFontSize();
+setInterval(loadOverlayFontSize, 5000);
+
+function getNotificationAudioTemplate() {
+  if (!notificationAudioTemplate) {
+    notificationAudioTemplate = new Audio(NOTIFICATION_SOUND_URL);
+    notificationAudioTemplate.preload = 'auto';
+    notificationAudioTemplate.volume = 1;
+  }
+  return notificationAudioTemplate;
+}
+
+function playNotificationSound() {
+  if (!soundEnabled) return;
+
+  const audio = getNotificationAudioTemplate().cloneNode();
+  audio.volume = 1;
+  audio.currentTime = 0;
+  audio.play().catch(() => {});
 }
 
 function setStatus(state) {
@@ -128,6 +184,10 @@ function addMessage(data, fromHistory) {
   updateEmptyState();
   scheduleRemoval(messageEl, data.timestamp, fromHistory);
 
+  if (!fromHistory) {
+    playNotificationSound();
+  }
+
   while (container.children.length > MAX_MESSAGES) {
     removeMessage(container.firstElementChild);
   }
@@ -149,6 +209,9 @@ function connect() {
 
   ws.onopen = () => {
     setStatus('connected');
+    if (soundEnabled) {
+      getNotificationAudioTemplate().load();
+    }
   };
 
   ws.onmessage = (event) => {
@@ -165,6 +228,8 @@ function connect() {
         }
       } else if (payload.type === 'message') {
         addMessage(payload.data, false);
+      } else if (payload.type === 'style') {
+        applyStyleFromConfig(payload.data);
       }
     } catch {
       // ignora
