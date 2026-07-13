@@ -42,6 +42,7 @@ const PLATFORM_LABELS = {
   twitch: 'TW',
   kick: 'KK',
   youtube: 'YT',
+  streamer: 'LIVE',
 };
 
 const container = document.getElementById('chat-container');
@@ -51,6 +52,9 @@ const statusDot = document.getElementById('status-dot');
 
 if (isPreview) {
   document.body.classList.add('preview-mode');
+}
+if (isObsChatFixo) {
+  document.body.classList.add('chat-fixo-mode');
 }
 
 const MIN_FONT_SIZE = 10;
@@ -262,16 +266,16 @@ function showDemoMessages() {
 }
 
 function connect() {
-  const ws = new WebSocket(getWsUrl());
+  activeWs = new WebSocket(getWsUrl());
 
-  ws.onopen = () => {
+  activeWs.onopen = () => {
     setStatus('connected');
     if (!soundForcedOff && notificationSoundEnabled) {
       getNotificationAudioTemplate().load();
     }
   };
 
-  ws.onmessage = (event) => {
+  activeWs.onmessage = (event) => {
     try {
       const payload = JSON.parse(event.data);
 
@@ -297,18 +301,67 @@ function connect() {
     }
   };
 
-  ws.onclose = () => {
+  activeWs.onclose = () => {
     setStatus('disconnected');
+    activeWs = null;
     setTimeout(connect, 3000);
   };
 
-  ws.onerror = () => {
+  activeWs.onerror = () => {
     setStatus('disconnected');
   };
 }
 
+function sendStreamerMessage(text) {
+  const message = String(text || '').trim();
+  if (!message) return false;
+
+  if (activeWs && activeWs.readyState === WebSocket.OPEN) {
+    activeWs.send(JSON.stringify({ type: 'streamer-message', message }));
+    return true;
+  }
+
+  fetch('/api/streamer-message', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message }),
+  }).catch(() => {});
+  return true;
+}
+
+function setupStreamerComposer() {
+  if (!isObsChatFixo) return;
+
+  const composer = document.getElementById('streamer-composer');
+  const input = document.getElementById('streamer-input');
+  const sendBtn = document.getElementById('streamer-send');
+  if (!composer || !input || !sendBtn) return;
+
+  composer.classList.remove('hidden');
+  composer.setAttribute('aria-hidden', 'false');
+
+  const submit = () => {
+    const ok = sendStreamerMessage(input.value);
+    if (ok) {
+      input.value = '';
+      input.focus();
+    }
+  };
+
+  sendBtn.addEventListener('click', submit);
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      submit();
+    }
+  });
+}
+
+let activeWs = null;
+
 connect();
 updateEmptyState();
+setupStreamerComposer();
 
 if (isDemo) {
   setTimeout(showDemoMessages, 500);

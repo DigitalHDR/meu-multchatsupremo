@@ -51,9 +51,31 @@ body.preview-mode {
   justify-content: flex-end;
   gap: 6px;
   width: 100%;
-  height: 100%;
+  flex: 1;
+  min-height: 0;
   padding: 8px 12px;
   overflow: hidden;
+}
+
+.overlay-layout {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+}
+
+.pinned-slot {
+  flex-shrink: 0;
+  padding: 8px 12px 0;
+  z-index: 5;
+}
+
+.pinned-slot.hidden {
+  display: none;
+}
+
+.pinned-slot .chat-message {
+  animation: none;
 }
 
 .chat-message {
@@ -89,6 +111,20 @@ body.preview-mode {
   border-left-color: #FF0000;
 }
 
+.chat-message.platform-streamer {
+  background: rgba(146, 64, 14, 0.9);
+  border-left-color: #f59e0b;
+  box-shadow: inset 0 0 0 1px rgba(245, 158, 11, 0.35);
+}
+
+/* Mensagem fixada: mesmo fundo das mensagens de usuários */
+.chat-message.platform-streamer.is-pinned,
+.pinned-slot .chat-message.platform-streamer {
+  background: rgba(0, 0, 0, 0.55);
+  box-shadow: none;
+  border-left-color: #f59e0b;
+}
+
 .platform-badge {
   display: inline-flex;
   align-items: center;
@@ -115,6 +151,11 @@ body.preview-mode {
 
 .platform-youtube .platform-badge {
   background: #FF0000;
+}
+
+.platform-streamer .platform-badge {
+  background: #f59e0b;
+  color: #1a1a22;
 }
 
 .username {
@@ -162,4 +203,81 @@ body.preview-mode {
     padding: 0;
     margin: 0;
   }
+}
+
+body.chat-fixo-mode #chat-container {
+  padding-bottom: 64px;
+}
+
+.streamer-composer {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  z-index: 20;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.streamer-composer.hidden {
+  display: none;
+}
+
+.streamer-composer input {
+  flex: 1;
+  min-width: 0;
+  height: 40px;
+  border: 1px solid #3e4451;
+  border-radius: 8px;
+  background: #1e2128;
+  color: #eceff4;
+  padding: 0 12px;
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+}
+
+.streamer-composer input:focus {
+  border-color: #f59e0b;
+}
+
+.streamer-composer button {
+  height: 40px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 8px;
+  background: #f59e0b;
+  color: #1a1a22;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.streamer-composer button:hover {
+  background: #fbbf24;
+}
+
+.streamer-composer button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.streamer-composer button.secondary {
+  background: #3e4451;
+  color: #eceff4;
+}
+
+.streamer-composer button.secondary:hover:not(:disabled) {
+  background: #525a6a;
+}
+
+.streamer-composer button.danger {
+  background: #7f1d1d;
+  color: #fecaca;
+}
+
+.streamer-composer button.danger:hover:not(:disabled) {
+  background: #991b1b;
 }

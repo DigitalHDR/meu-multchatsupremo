@@ -20,6 +20,7 @@ const DEFAULT_ENV = {
   OVERLAY_FONT_SIZE: '22',
   OVERLAY_FONT_SIZE_FIXO: '16',
   OVERLAY_MAX_MESSAGES: '10',
+  STREAMER_DISPLAY_NAME: '',
   NOTIFICATION_SOUND_ENABLED: '1',
   NOTIFICATION_SOUND_INTERVAL: '0',
 };
@@ -28,6 +29,14 @@ const MIN_FONT_SIZE = 10;
 const MAX_FONT_SIZE = 36;
 
 const ENV_KEYS = Object.keys(DEFAULT_ENV);
+
+function normalizeStreamerDisplayName(value) {
+  const text = String(value ?? '')
+    .replace(/[\u0000-\u001F\u007F]/g, '')
+    .trim()
+    .slice(0, 40);
+  return text;
+}
 
 function normalizeSoundEnabled(value) {
   const raw = String(value ?? DEFAULT_ENV.NOTIFICATION_SOUND_ENABLED).trim().toLowerCase();
@@ -82,6 +91,7 @@ function readEnvFile() {
   } catch {
     config.OVERLAY_MAX_MESSAGES = DEFAULT_ENV.OVERLAY_MAX_MESSAGES;
   }
+  config.STREAMER_DISPLAY_NAME = normalizeStreamerDisplayName(config.STREAMER_DISPLAY_NAME);
 
   return config;
 }
@@ -111,6 +121,7 @@ function writeEnvFile(updates) {
   const maxMessages = normalizeMaxMessages(
     merged.OVERLAY_MAX_MESSAGES ?? DEFAULT_ENV.OVERLAY_MAX_MESSAGES
   );
+  const streamerName = normalizeStreamerDisplayName(merged.STREAMER_DISPLAY_NAME);
 
   const lines = [
     '# Porta do servidor local',
@@ -126,6 +137,9 @@ function writeEnvFile(updates) {
     '',
     '# Opcional: token OAuth do Twitch',
     `TWITCH_OAUTH=${merged.TWITCH_OAUTH || ''}`,
+    '',
+    '# Nome que aparece nas mensagens LIVE do streamer (vazio = usa o canal Twitch/Kick)',
+    `STREAMER_DISPLAY_NAME=${streamerName}`,
     '',
     '# Aparência do overlay',
     `OVERLAY_FONT_SIZE=${Math.round(fontSize)}`,
@@ -145,6 +159,7 @@ function writeEnvFile(updates) {
     OVERLAY_FONT_SIZE: String(Math.round(fontSize)),
     OVERLAY_FONT_SIZE_FIXO: String(Math.round(fontSizeFixo)),
     OVERLAY_MAX_MESSAGES: maxMessages,
+    STREAMER_DISPLAY_NAME: streamerName,
     NOTIFICATION_SOUND_ENABLED: soundEnabled,
     NOTIFICATION_SOUND_INTERVAL: soundInterval,
   };
@@ -194,4 +209,5 @@ module.exports = {
   normalizeSoundEnabled,
   normalizeSoundInterval,
   normalizeMaxMessages,
+  normalizeStreamerDisplayName,
 };

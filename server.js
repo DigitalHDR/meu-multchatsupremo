@@ -29,6 +29,7 @@ const wss = new WebSocketServer({ server });
 const clients = new Set();
 const history = [];
 let lastNotificationSoundAt = 0;
+let pinnedStreamerMessage = null;
 
 app.use(express.json());
 
@@ -56,7 +57,7 @@ function sendOverlayPage(res, mode = 'publico') {
   );
   html = html.replace(
     /src="\/overlay\.v\d+\.js"/,
-    `src="/overlay.v21.js?t=${cacheBust}"`
+    `src="/overlay.v23.js?t=${cacheBust}"`
   );
   res.set({
     'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
@@ -91,6 +92,8 @@ app.get(
     '/overlay.v19.js',
     '/overlay.v20.js',
     '/overlay.v21.js',
+    '/overlay.v22.js',
+    '/overlay.v23.js',
   ],
   (_req, res) => {
     res.set({
@@ -133,6 +136,7 @@ app.post('/api/config', async (req, res) => {
       YOUTUBE_CHANNEL,
       YOUTUBE_VIDEO_ID,
       TWITCH_OAUTH,
+      STREAMER_DISPLAY_NAME,
       OVERLAY_FONT_SIZE,
       OVERLAY_FONT_SIZE_FIXO,
       OVERLAY_MAX_MESSAGES,
@@ -147,6 +151,7 @@ app.post('/api/config', async (req, res) => {
       YOUTUBE_CHANNEL: YOUTUBE_CHANNEL ?? '',
       YOUTUBE_VIDEO_ID: YOUTUBE_VIDEO_ID ?? '',
       TWITCH_OAUTH: TWITCH_OAUTH ?? '',
+      STREAMER_DISPLAY_NAME: STREAMER_DISPLAY_NAME ?? current.STREAMER_DISPLAY_NAME,
       OVERLAY_FONT_SIZE: OVERLAY_FONT_SIZE ?? current.OVERLAY_FONT_SIZE,
       OVERLAY_FONT_SIZE_FIXO: OVERLAY_FONT_SIZE_FIXO ?? current.OVERLAY_FONT_SIZE_FIXO,
       OVERLAY_MAX_MESSAGES: OVERLAY_MAX_MESSAGES ?? current.OVERLAY_MAX_MESSAGES,
@@ -217,6 +222,98 @@ app.get('/api/test-message', (_req, res) => {
     timestamp: Date.now(),
   });
   res.json({ ok: true });
+});
+
+function getStreamerDisplayName() {
+  const config = readEnvFile();
+  const custom = String(config.STREAMER_DISPLAY_NAME || '').trim();
+  if (custom) return custom.slice(0, 40);
+
+  return (
+    parseTwitchChannel(process.env.TWITCH_CHANNEL) ||
+    parseKickChannel(process.env.KICK_CHANNEL) ||
+    'Streamer'
+  );
+}
+
+function sanitizeStreamerMessage(raw) {
+  const text = String(raw ?? '')
+    .replace(/[\u0000-\u001F\u007F]/g, '')
+    .trim();
+  if (!text) return null;
+  return text.slice(0, 300);
+}
+
+function handleStreamerMessage(rawMessage) {
+  const message = sanitizeStreamerMessage(rawMessage);
+  if (!message) {
+    return { ok: false, error: 'Mensagem vazia.' };
+  }
+
+  handleChatMessage({
+    platform: 'streamer',
+    username: getStreamerDisplayName(),
+    message,
+    color: '#fbbf24',
+    badges: {},
+    timestamp: Date.now(),
+  });
+
+  return { ok: true };
+}
+
+function buildStreamerPayload(message) {
+  return {
+    platform: 'streamer',
+    username: getStreamerDisplayName(),
+    message,
+    color: '#fbbf24',
+    badges: {},
+    timestamp: Date.now(),
+    pinned: true,
+  };
+}
+
+function setPinnedStreamerMessage(message) {
+  pinnedStreamerMessage = buildStreamerPayload(message);
+  broadcast({ type: 'pinned', data: pinnedStreamerMessage });
+  return { ok: true, pinned: pinnedStreamerMessage };
+}
+
+function clearPinnedStreamerMessage() {
+  pinnedStreamerMessage = null;
+  broadcast({ type: 'pinned', data: null });
+  return { ok: true, pinned: null };
+}
+
+function handleStreamerPin(rawMessage) {
+  const message = sanitizeStreamerMessage(rawMessage);
+  if (!message) {
+    return { ok: false, error: 'Mensagem vazia.' };
+  }
+  return setPinnedStreamerMessage(message);
+}
+
+app.post('/api/streamer-message', (req, res) => {
+  const result = handleStreamerMessage(req.body && req.body.message);
+  if (!result.ok) {
+    res.status(400).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.post('/api/streamer-pin', (req, res) => {
+  const result = handleStreamerPin(req.body && req.body.message);
+  if (!result.ok) {
+    res.status(400).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.delete('/api/streamer-pin', (_req, res) => {
+  res.json(clearPinnedStreamerMessage());
 });
 
 function broadcast(message) {
@@ -298,6 +395,24 @@ wss.on('connection', (ws) => {
       NOTIFICATION_SOUND_INTERVAL: config.NOTIFICATION_SOUND_INTERVAL,
     },
   }));
+  ws.send(JSON.stringify({ type: 'pinned', data: pinnedStreamerMessage }));
+
+  ws.on('message', (raw) => {
+    try {
+      const payload = JSON.parse(String(raw));
+      if (!payload || !payload.type) return;
+      if (payload.type === 'streamer-message') {
+        handleStreamerMessage(payload.message);
+      } else if (payload.type === 'streamer-pin') {
+        handleStreamerPin(payload.message);
+      } else if (payload.type === 'streamer-unpin') {
+        clearPinnedStreamerMessage();
+      }
+    } catch {
+      // ignora payload inválido
+    }
+  });
+
   ws.on('close', () => clients.delete(ws));
 });
 

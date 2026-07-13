@@ -6,13 +6,30 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
   <title>Multichat Overlay</title>
-  <link rel="stylesheet" href="/overlay.css?v=6" />
+  <link rel="stylesheet" href="/overlay.css?v=9" />
 </head>
 <body>
   <div id="status-bar" class="status-bar">
     <span id="status-dot" class="status-dot"></span>
   </div>
-  <div id="chat-container"></div>
+
+  <div class="overlay-layout">
+    <div id="pinned-slot" class="pinned-slot hidden" aria-live="polite"></div>
+    <div id="chat-container"></div>
+  </div>
+
+  <div id="streamer-composer" class="streamer-composer hidden" aria-hidden="true">
+    <input
+      id="streamer-input"
+      type="text"
+      maxlength="300"
+      autocomplete="off"
+      placeholder="Digite uma mensagem para o chat..."
+    />
+    <button id="streamer-send" type="button">Enviar</button>
+    <button id="streamer-pin" type="button">Fixar</button>
+    <button id="streamer-unpin" type="button" disabled>Desfixar</button>
+  </div>
 
   <template id="message-template">
     <div class="chat-message">
@@ -23,6 +40,6 @@
   </template>
 
   <script>/*__MULTICHAT_STYLE_BOOTSTRAP__*/</script>
-  <script src="/overlay.v21.js"></script>
+  <script src="/overlay.v23.js"></script>
 </body>
 </html>

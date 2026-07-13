@@ -59,6 +59,7 @@ DEFAULT_ENV = {
     "OVERLAY_FONT_SIZE": "22",
     "OVERLAY_FONT_SIZE_FIXO": "16",
     "OVERLAY_MAX_MESSAGES": "10",
+    "STREAMER_DISPLAY_NAME": "",
     "NOTIFICATION_SOUND_ENABLED": "1",
     "NOTIFICATION_SOUND_INTERVAL": "0",
 }
@@ -385,6 +386,7 @@ def write_env(cfg: dict) -> None:
     sound_enabled = "1" if parse_sound_enabled(cfg.get("NOTIFICATION_SOUND_ENABLED", "1")) else "0"
     sound_interval = parse_sound_interval(cfg.get("NOTIFICATION_SOUND_INTERVAL", str(SOUND_INTERVAL_DEFAULT)))
     max_messages = parse_max_messages(cfg.get("OVERLAY_MAX_MESSAGES", str(MAX_MESSAGES_DEFAULT)))
+    streamer_name = str(cfg.get("STREAMER_DISPLAY_NAME", "")).strip()[:40]
 
     content = f"""# Porta do servidor local
 PORT={port}
@@ -399,6 +401,9 @@ YOUTUBE_VIDEO_ID={cfg.get('YOUTUBE_VIDEO_ID', '')}
 
 # Opcional: token OAuth do Twitch
 TWITCH_OAUTH={cfg.get('TWITCH_OAUTH', '')}
+
+# Nome nas mensagens LIVE do streamer (vazio = usa canal Twitch/Kick)
+STREAMER_DISPLAY_NAME={streamer_name}
 
 # Aparencia do overlay
 OVERLAY_FONT_SIZE={font_size}
@@ -664,6 +669,16 @@ class MainWindow(QMainWindow):
         subtitle.setObjectName("subtitle")
         layout.addWidget(subtitle)
 
+        grp_streamer = QGroupBox("Streamer")
+        streamer_layout = QVBoxLayout(grp_streamer)
+        streamer_layout.setContentsMargins(14, GROUP_INNER_TOP, 14, 14)
+        streamer_layout.setSpacing(ROW_GAP)
+
+        self.streamer_name = QLineEdit()
+        self.streamer_name.setPlaceholderText("Aparece nas mensagens LIVE (vazio = canal Twitch/Kick)")
+        streamer_layout.addWidget(self._channel_row("Seu nome de Streamer:", self.streamer_name))
+        layout.addWidget(grp_streamer)
+
         # Canais
         grp_channels = QGroupBox("Canais")
         channels_layout = QVBoxLayout(grp_channels)
@@ -913,6 +928,7 @@ class MainWindow(QMainWindow):
         self.kick.setText(cfg["KICK_CHANNEL"])
         self.yt_channel.setText(cfg["YOUTUBE_CHANNEL"])
         self.yt_video.setText(cfg["YOUTUBE_VIDEO_ID"])
+        self.streamer_name.setText(cfg.get("STREAMER_DISPLAY_NAME", ""))
 
         try:
             font_size = int(cfg.get("OVERLAY_FONT_SIZE", str(FONT_SIZE_DEFAULT)))
@@ -1006,6 +1022,7 @@ class MainWindow(QMainWindow):
                 "KICK_CHANNEL": self.kick.text().strip(),
                 "YOUTUBE_CHANNEL": self.yt_channel.text().strip(),
                 "YOUTUBE_VIDEO_ID": self.yt_video.text().strip(),
+                "STREAMER_DISPLAY_NAME": self.streamer_name.text().strip()[:40],
                 "OVERLAY_FONT_SIZE": str(self.font_size.value()),
                 "OVERLAY_FONT_SIZE_FIXO": str(self.font_size_fixo.value()),
                 "OVERLAY_MAX_MESSAGES": str(self._selected_max_messages()),

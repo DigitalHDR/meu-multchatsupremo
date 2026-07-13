@@ -7,6 +7,7 @@ Agrega mensagens do chat do **Twitch**, **Kick** e **YouTube** em um único over
 - Chat unificado das três plataformas em tempo real (WebSocket)
 - Overlay com fundo transparente para o OBS
 - Emotes do Twitch, Kick e YouTube
+- Chat fixo do streamer com caixa para enviar mensagens próprias (fundo destacado) visíveis no overlay público
 - Mensagens somem automaticamente após **1 minuto** (padrão) ou **10 minutos** (modo chat fixo)
 - Som de notificação (`notification-som/notification.mp3`) a cada mensagem nova no overlay (desative na interface, no `.env` ou com `?sound=0` na URL)
 - Intervalo mínimo configurável entre sons: **0** (a cada mensagem) ou **10–60 segundos**
@@ -78,6 +79,7 @@ A pasta **`gui/`** contém a interface desktop principal:
 
 ### Campos da interface
 
+- **Seu nome de Streamer** (seção Streamer, no topo) — nome das mensagens enviadas pelo streamer
 - **Twitch**, **Kick**, **YouTube canal**, **YouTube vídeo ID**
 - **Tamanho da fonte — overlay público** (`/overlaypublico`) — padrão 22 px — botões **▲** (aumentar) e **▼** (diminuir)
 - **Tamanho da fonte — chat fixo** (`/chatfixostremer`) — padrão 16 px — mesmos controles
@@ -153,6 +155,9 @@ YOUTUBE_VIDEO_ID=
 # Opcional: token OAuth do Twitch
 TWITCH_OAUTH=
 
+# Nome nas mensagens LIVE do streamer (vazio = canal Twitch/Kick)
+STREAMER_DISPLAY_NAME=
+
 # Tamanho da fonte das mensagens no overlay (10 a 36)
 OVERLAY_FONT_SIZE=22
 OVERLAY_FONT_SIZE_FIXO=16
@@ -165,7 +170,6 @@ OVERLAY_MAX_MESSAGES=10
 NOTIFICATION_SOUND_ENABLED=1
 NOTIFICATION_SOUND_INTERVAL=0
 ```
-
 Deixe uma variável vazia para desativar a plataforma.
 
 ### Como encontrar o ID do vídeo do YouTube
@@ -246,6 +250,7 @@ Em `public/overlay.js`:
 |-----------|--------|-----------|
 | `OVERLAY_FONT_SIZE` (`.env`) | 22 | Fonte do overlay público (`/overlaypublico`) |
 | `OVERLAY_FONT_SIZE_FIXO` (`.env`) | 16 | Fonte do chat fixo do streamer (`/chatfixostremer`) |
+| `STREAMER_DISPLAY_NAME` (`.env`) | (vazio) | Nome nas mensagens LIVE; se vazio, usa Twitch/Kick |
 | `OVERLAY_MAX_MESSAGES` (`.env`) | 10 | Máximo de mensagens só no `/overlaypublico` (3–10) |
 | Limite do chat fixo | 100 | Máximo de mensagens no `/chatfixostremer` (fixo; não usa a config do público) |
 | `MESSAGE_LIFETIME_MS` | 60000 (1 min) | Tempo até sumir; 600000 (10 min) no `/chatfixostremer` |
