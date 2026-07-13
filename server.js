@@ -19,8 +19,8 @@ const {
 } = require('./utils/config');
 
 const PORT = Number(process.env.PORT) || AVAILABLE_PORTS[0];
-const MAX_HISTORY = 50;
-const HISTORY_TTL_MS = 60_000;
+const MAX_HISTORY = 100;
+const HISTORY_TTL_MS = 600_000;
 
 const app = express();
 const server = http.createServer(app);
@@ -32,20 +32,23 @@ let lastNotificationSoundAt = 0;
 
 app.use(express.json());
 
-function getOverlayStyleConfig() {
+function getOverlayStyleConfig(mode = 'publico') {
   const config = readEnvFile();
+  const isFixo = mode === 'fixo';
   return {
+    OVERLAY_MODE: isFixo ? 'fixo' : 'publico',
     OVERLAY_FONT_SIZE: config.OVERLAY_FONT_SIZE,
     OVERLAY_FONT_SIZE_FIXO: config.OVERLAY_FONT_SIZE_FIXO,
+    OVERLAY_MAX_MESSAGES: isFixo ? '100' : config.OVERLAY_MAX_MESSAGES,
     NOTIFICATION_SOUND_ENABLED: config.NOTIFICATION_SOUND_ENABLED,
     NOTIFICATION_SOUND_INTERVAL: config.NOTIFICATION_SOUND_INTERVAL,
   };
 }
 
-function sendOverlayPage(res) {
+function sendOverlayPage(res, mode = 'publico') {
   const htmlPath = path.join(__dirname, 'public', 'overlay.html');
   let html = fs.readFileSync(htmlPath, 'utf8');
-  const boot = JSON.stringify(getOverlayStyleConfig());
+  const boot = JSON.stringify(getOverlayStyleConfig(mode));
   const cacheBust = Date.now();
   html = html.replace(
     '/*__MULTICHAT_STYLE_BOOTSTRAP__*/',
@@ -53,7 +56,7 @@ function sendOverlayPage(res) {
   );
   html = html.replace(
     /src="\/overlay\.v\d+\.js"/,
-    `src="/overlay.v16.js?t=${cacheBust}"`
+    `src="/overlay.v21.js?t=${cacheBust}"`
   );
   res.set({
     'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
@@ -64,11 +67,11 @@ function sendOverlayPage(res) {
 }
 
 app.get('/overlaypublico', (_req, res) => {
-  sendOverlayPage(res);
+  sendOverlayPage(res, 'publico');
 });
 
 app.get('/chatfixostremer', (_req, res) => {
-  sendOverlayPage(res);
+  sendOverlayPage(res, 'fixo');
 });
 
 app.get('/overlay', (_req, res) => {
@@ -79,14 +82,25 @@ app.get('/overlay.html', (_req, res) => {
   res.redirect('/overlaypublico');
 });
 
-app.get(['/overlay.js', '/overlay.v16.js'], (_req, res) => {
-  res.set({
-    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-    Pragma: 'no-cache',
-    Expires: '0',
-  });
-  res.type('application/javascript').sendFile(path.join(__dirname, 'public', 'overlay.js'));
-});
+app.get(
+  [
+    '/overlay.js',
+    '/overlay.v16.js',
+    '/overlay.v17.js',
+    '/overlay.v18.js',
+    '/overlay.v19.js',
+    '/overlay.v20.js',
+    '/overlay.v21.js',
+  ],
+  (_req, res) => {
+    res.set({
+      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+      Pragma: 'no-cache',
+      Expires: '0',
+    });
+    res.type('application/javascript').sendFile(path.join(__dirname, 'public', 'overlay.js'));
+  }
+);
 
 app.use(express.static(path.join(__dirname, 'public'), {
   etag: false,
@@ -121,6 +135,7 @@ app.post('/api/config', async (req, res) => {
       TWITCH_OAUTH,
       OVERLAY_FONT_SIZE,
       OVERLAY_FONT_SIZE_FIXO,
+      OVERLAY_MAX_MESSAGES,
       NOTIFICATION_SOUND_ENABLED,
       NOTIFICATION_SOUND_INTERVAL,
     } = req.body;
@@ -134,6 +149,7 @@ app.post('/api/config', async (req, res) => {
       TWITCH_OAUTH: TWITCH_OAUTH ?? '',
       OVERLAY_FONT_SIZE: OVERLAY_FONT_SIZE ?? current.OVERLAY_FONT_SIZE,
       OVERLAY_FONT_SIZE_FIXO: OVERLAY_FONT_SIZE_FIXO ?? current.OVERLAY_FONT_SIZE_FIXO,
+      OVERLAY_MAX_MESSAGES: OVERLAY_MAX_MESSAGES ?? current.OVERLAY_MAX_MESSAGES,
       NOTIFICATION_SOUND_ENABLED: NOTIFICATION_SOUND_ENABLED ?? current.NOTIFICATION_SOUND_ENABLED,
       NOTIFICATION_SOUND_INTERVAL: NOTIFICATION_SOUND_INTERVAL ?? current.NOTIFICATION_SOUND_INTERVAL,
     });
@@ -159,6 +175,7 @@ app.patch('/api/overlay-appearance', (req, res) => {
     const {
       OVERLAY_FONT_SIZE,
       OVERLAY_FONT_SIZE_FIXO,
+      OVERLAY_MAX_MESSAGES,
       NOTIFICATION_SOUND_ENABLED,
       NOTIFICATION_SOUND_INTERVAL,
     } = req.body || {};
@@ -166,6 +183,7 @@ app.patch('/api/overlay-appearance', (req, res) => {
       ...current,
       OVERLAY_FONT_SIZE: OVERLAY_FONT_SIZE ?? current.OVERLAY_FONT_SIZE,
       OVERLAY_FONT_SIZE_FIXO: OVERLAY_FONT_SIZE_FIXO ?? current.OVERLAY_FONT_SIZE_FIXO,
+      OVERLAY_MAX_MESSAGES: OVERLAY_MAX_MESSAGES ?? current.OVERLAY_MAX_MESSAGES,
       NOTIFICATION_SOUND_ENABLED: NOTIFICATION_SOUND_ENABLED ?? current.NOTIFICATION_SOUND_ENABLED,
       NOTIFICATION_SOUND_INTERVAL: NOTIFICATION_SOUND_INTERVAL ?? current.NOTIFICATION_SOUND_INTERVAL,
     });
@@ -211,7 +229,19 @@ function broadcast(message) {
 }
 
 function broadcastOverlayStyle() {
-  broadcast({ type: 'style', data: getOverlayStyleConfig() });
+  // Envia estilo neutro (sem forçar limite do público nos clientes fixo;
+  // cada página aplica com resolveMaxMessages / OVERLAY_MODE do boot).
+  const config = readEnvFile();
+  broadcast({
+    type: 'style',
+    data: {
+      OVERLAY_FONT_SIZE: config.OVERLAY_FONT_SIZE,
+      OVERLAY_FONT_SIZE_FIXO: config.OVERLAY_FONT_SIZE_FIXO,
+      OVERLAY_MAX_MESSAGES: config.OVERLAY_MAX_MESSAGES,
+      NOTIFICATION_SOUND_ENABLED: config.NOTIFICATION_SOUND_ENABLED,
+      NOTIFICATION_SOUND_INTERVAL: config.NOTIFICATION_SOUND_INTERVAL,
+    },
+  });
 }
 
 function canPlayNotificationSoundNow() {
@@ -256,7 +286,18 @@ wss.on('connection', (ws) => {
   clients.add(ws);
   const hist = getActiveHistory().map((msg) => ({ ...msg, playSound: false }));
   ws.send(JSON.stringify({ type: 'history', data: hist }));
-  ws.send(JSON.stringify({ type: 'style', data: getOverlayStyleConfig() }));
+  // Sem OVERLAY_MODE: o cliente mantém o modo do boot da página
+  const config = readEnvFile();
+  ws.send(JSON.stringify({
+    type: 'style',
+    data: {
+      OVERLAY_FONT_SIZE: config.OVERLAY_FONT_SIZE,
+      OVERLAY_FONT_SIZE_FIXO: config.OVERLAY_FONT_SIZE_FIXO,
+      OVERLAY_MAX_MESSAGES: config.OVERLAY_MAX_MESSAGES,
+      NOTIFICATION_SOUND_ENABLED: config.NOTIFICATION_SOUND_ENABLED,
+      NOTIFICATION_SOUND_INTERVAL: config.NOTIFICATION_SOUND_INTERVAL,
+    },
+  }));
   ws.on('close', () => clients.delete(ws));
 });
 

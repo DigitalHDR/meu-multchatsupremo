@@ -1,13 +1,20 @@
 const params = new URLSearchParams(location.search);
 const pathBase = location.pathname.replace(/\/$/, '');
-const isChatFixoStreamer = pathBase.endsWith('/chatfixostremer');
-const isPreview = params.has('preview') || isChatFixoStreamer;
+const bootStyle = window.__MULTICHAT_STYLE__ || {};
+
+// Preferência absoluta: modo injetado pelo servidor na rota
+const isObsChatFixo =
+  bootStyle.OVERLAY_MODE === 'fixo' ||
+  /\/chatfixostremer$/i.test(pathBase) ||
+  params.has('obschatfixo');
+
+const isPreview = params.has('preview') || isObsChatFixo;
 const isDemo = params.has('demo');
-const isObsChatFixo = isChatFixoStreamer || params.has('obschatfixo');
 const soundForcedOff = params.get('sound') === '0';
 
 const MESSAGE_LIFETIME_MS = (isDemo || isObsChatFixo) ? 600000 : 60000;
-const MAX_MESSAGES = 30;
+const MAX_MESSAGES_FIXO = 100;
+const MAX_MESSAGE_OPTIONS = [3, 4, 5, 6, 7, 8, 9, 10];
 const FADE_DURATION_MS = 500;
 
 const messageTimers = new WeakMap();
@@ -18,6 +25,18 @@ let notificationAudioTemplate = null;
 let notificationSoundEnabled = !soundForcedOff;
 let notificationSoundIntervalSec = 0;
 let lastNotificationAt = 0;
+
+function resolveMaxMessages(config) {
+  if (isObsChatFixo || (config && config.OVERLAY_MODE === 'fixo')) {
+    return MAX_MESSAGES_FIXO;
+  }
+  const maxMsg = Number.parseInt(String((config && config.OVERLAY_MAX_MESSAGES) ?? '10'), 10);
+  if (Number.isFinite(maxMsg) && MAX_MESSAGE_OPTIONS.includes(maxMsg)) return maxMsg;
+  return 10;
+}
+
+// Público: 3–10 (config). Chat fixo: sempre 100.
+let maxMessagesShown = resolveMaxMessages(bootStyle);
 
 const PLATFORM_LABELS = {
   twitch: 'TW',
@@ -50,6 +69,10 @@ function applyStyleFromConfig(config) {
   if (!config) return;
   const size = isObsChatFixo ? config.OVERLAY_FONT_SIZE_FIXO : config.OVERLAY_FONT_SIZE;
   applyFontSize(size);
+
+  // Chat fixo NUNCA herda o limite do overlay público
+  maxMessagesShown = resolveMaxMessages(config);
+  trimMessagesToLimit();
 
   if (!soundForcedOff) {
     const enabledRaw = String(config.NOTIFICATION_SOUND_ENABLED ?? '1').toLowerCase();
@@ -156,7 +179,7 @@ function renderMessageContent(el, data) {
   }
 }
 
-function removeMessage(messageEl) {
+function removeMessage(messageEl, instant) {
   const timer = messageTimers.get(messageEl);
   if (timer) {
     clearTimeout(timer);
@@ -164,6 +187,12 @@ function removeMessage(messageEl) {
   }
 
   if (!isInDom(messageEl)) return;
+
+  if (instant) {
+    messageEl.remove();
+    updateEmptyState();
+    return;
+  }
 
   messageEl.classList.add('fade-out');
 
@@ -189,6 +218,13 @@ function scheduleRemoval(messageEl, timestamp, fromHistory) {
   messageTimers.set(messageEl, timer);
 }
 
+function trimMessagesToLimit() {
+  if (!container) return;
+  while (container.children.length > maxMessagesShown) {
+    removeMessage(container.firstElementChild, true);
+  }
+}
+
 function addMessage(data, fromHistory) {
   if (!template || !container) return;
 
@@ -210,10 +246,7 @@ function addMessage(data, fromHistory) {
   container.appendChild(messageEl);
   updateEmptyState();
   scheduleRemoval(messageEl, data.timestamp, fromHistory);
-
-  while (container.children.length > MAX_MESSAGES) {
-    removeMessage(container.firstElementChild);
-  }
+  trimMessagesToLimit();
 }
 
 function showDemoMessages() {

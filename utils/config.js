@@ -8,6 +8,7 @@ const ENV_PATH = path.join(__dirname, '..', '.env');
 const AVAILABLE_PORTS = [3847, 3857, 3867];
 
 const SOUND_INTERVALS = [0, 10, 20, 30, 40, 50, 60];
+const MAX_MESSAGE_OPTIONS = [3, 4, 5, 6, 7, 8, 9, 10];
 
 const DEFAULT_ENV = {
   PORT: '3847',
@@ -18,6 +19,7 @@ const DEFAULT_ENV = {
   TWITCH_OAUTH: '',
   OVERLAY_FONT_SIZE: '22',
   OVERLAY_FONT_SIZE_FIXO: '16',
+  OVERLAY_MAX_MESSAGES: '10',
   NOTIFICATION_SOUND_ENABLED: '1',
   NOTIFICATION_SOUND_INTERVAL: '0',
 };
@@ -25,18 +27,7 @@ const DEFAULT_ENV = {
 const MIN_FONT_SIZE = 10;
 const MAX_FONT_SIZE = 36;
 
-const ENV_KEYS = [
-  'PORT',
-  'TWITCH_CHANNEL',
-  'KICK_CHANNEL',
-  'YOUTUBE_CHANNEL',
-  'YOUTUBE_VIDEO_ID',
-  'TWITCH_OAUTH',
-  'OVERLAY_FONT_SIZE',
-  'OVERLAY_FONT_SIZE_FIXO',
-  'NOTIFICATION_SOUND_ENABLED',
-  'NOTIFICATION_SOUND_INTERVAL',
-];
+const ENV_KEYS = Object.keys(DEFAULT_ENV);
 
 function normalizeSoundEnabled(value) {
   const raw = String(value ?? DEFAULT_ENV.NOTIFICATION_SOUND_ENABLED).trim().toLowerCase();
@@ -48,6 +39,14 @@ function normalizeSoundInterval(value) {
   const n = Number(value);
   if (!Number.isFinite(n) || !SOUND_INTERVALS.includes(n)) {
     throw new Error(`Intervalo do som inválido. Use: ${SOUND_INTERVALS.join(', ')} segundos.`);
+  }
+  return String(n);
+}
+
+function normalizeMaxMessages(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || !MAX_MESSAGE_OPTIONS.includes(n)) {
+    throw new Error(`Limite de mensagens inválido. Use: ${MAX_MESSAGE_OPTIONS.join(', ')}.`);
   }
   return String(n);
 }
@@ -78,6 +77,11 @@ function readEnvFile() {
   } catch {
     config.NOTIFICATION_SOUND_INTERVAL = DEFAULT_ENV.NOTIFICATION_SOUND_INTERVAL;
   }
+  try {
+    config.OVERLAY_MAX_MESSAGES = normalizeMaxMessages(config.OVERLAY_MAX_MESSAGES);
+  } catch {
+    config.OVERLAY_MAX_MESSAGES = DEFAULT_ENV.OVERLAY_MAX_MESSAGES;
+  }
 
   return config;
 }
@@ -104,6 +108,9 @@ function writeEnvFile(updates) {
   const soundInterval = normalizeSoundInterval(
     merged.NOTIFICATION_SOUND_INTERVAL ?? DEFAULT_ENV.NOTIFICATION_SOUND_INTERVAL
   );
+  const maxMessages = normalizeMaxMessages(
+    merged.OVERLAY_MAX_MESSAGES ?? DEFAULT_ENV.OVERLAY_MAX_MESSAGES
+  );
 
   const lines = [
     '# Porta do servidor local',
@@ -123,6 +130,8 @@ function writeEnvFile(updates) {
     '# Aparência do overlay',
     `OVERLAY_FONT_SIZE=${Math.round(fontSize)}`,
     `OVERLAY_FONT_SIZE_FIXO=${Math.round(fontSizeFixo)}`,
+    `# Limite de mensagens no overlay público (3 a 10)`,
+    `OVERLAY_MAX_MESSAGES=${maxMessages}`,
     '',
     '# Som de notificação (0 = a cada mensagem; 10–60 = intervalo mínimo em segundos)',
     `NOTIFICATION_SOUND_ENABLED=${soundEnabled}`,
@@ -135,6 +144,7 @@ function writeEnvFile(updates) {
     ...merged,
     OVERLAY_FONT_SIZE: String(Math.round(fontSize)),
     OVERLAY_FONT_SIZE_FIXO: String(Math.round(fontSizeFixo)),
+    OVERLAY_MAX_MESSAGES: maxMessages,
     NOTIFICATION_SOUND_ENABLED: soundEnabled,
     NOTIFICATION_SOUND_INTERVAL: soundInterval,
   };
@@ -177,10 +187,11 @@ module.exports = {
   ENV_PATH,
   AVAILABLE_PORTS,
   SOUND_INTERVALS,
+  MAX_MESSAGE_OPTIONS,
   readEnvFile,
   writeEnvFile,
   getPortsStatus,
   normalizeSoundEnabled,
   normalizeSoundInterval,
-  SOUND_INTERVALS,
+  normalizeMaxMessages,
 };

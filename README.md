@@ -81,6 +81,7 @@ A pasta **`gui/`** contém a interface desktop principal:
 - **Twitch**, **Kick**, **YouTube canal**, **YouTube vídeo ID**
 - **Tamanho da fonte — overlay público** (`/overlaypublico`) — padrão 22 px — botões **▲** (aumentar) e **▼** (diminuir)
 - **Tamanho da fonte — chat fixo** (`/chatfixostremer`) — padrão 16 px — mesmos controles
+- **Mensagens no público** — quantas mensagens mostrar no `/overlaypublico` (3 a 10; padrão 10)
 - **Notificação** — ativar/desativar o som e escolher o intervalo mínimo entre toques (a cada mensagem, ou 10/20/30/40/50/60 segundos)
 - **Porta do servidor:** 3847, 3857 ou 3867 (status: Livre / Em uso / Ativa)
 - **URLs para o OBS** (com botão Copiar):
@@ -155,6 +156,9 @@ TWITCH_OAUTH=
 # Tamanho da fonte das mensagens no overlay (10 a 36)
 OVERLAY_FONT_SIZE=22
 OVERLAY_FONT_SIZE_FIXO=16
+
+# Limite de mensagens no overlay público (3 a 10)
+OVERLAY_MAX_MESSAGES=10
 
 # Som de notificação (1 = ligado, 0 = desligado)
 # Intervalo mínimo entre sons: 0 = a cada mensagem; 10, 20, 30, 40, 50 ou 60 segundos
@@ -242,9 +246,8 @@ Em `public/overlay.js`:
 |-----------|--------|-----------|
 | `OVERLAY_FONT_SIZE` (`.env`) | 22 | Fonte do overlay público (`/overlaypublico`) |
 | `OVERLAY_FONT_SIZE_FIXO` (`.env`) | 16 | Fonte do chat fixo do streamer (`/chatfixostremer`) |
-| `NOTIFICATION_SOUND_ENABLED` (`.env`) | 1 | Liga (`1`) ou desliga (`0`) o som de notificação |
-| `NOTIFICATION_SOUND_INTERVAL` (`.env`) | 0 | Intervalo mínimo entre sons (controle no servidor): `0` (a cada mensagem) ou `10`–`60` |
-| `MAX_MESSAGES` | 30 | Máximo de mensagens na tela |
+| `OVERLAY_MAX_MESSAGES` (`.env`) | 10 | Máximo de mensagens só no `/overlaypublico` (3–10) |
+| Limite do chat fixo | 100 | Máximo de mensagens no `/chatfixostremer` (fixo; não usa a config do público) |
 | `MESSAGE_LIFETIME_MS` | 60000 (1 min) | Tempo até sumir; 600000 (10 min) no `/chatfixostremer` |
 | `FADE_DURATION_MS` | 500 | Duração do fade ao remover |
 

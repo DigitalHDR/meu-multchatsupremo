@@ -44,6 +44,8 @@ FONT_SIZE_FIXO_DEFAULT = 16
 SOUND_INTERVALS = [0, 10, 20, 30, 40, 50, 60]
 SOUND_ENABLED_DEFAULT = True
 SOUND_INTERVAL_DEFAULT = 0
+MAX_MESSAGE_OPTIONS = [3, 4, 5, 6, 7, 8, 9, 10]
+MAX_MESSAGES_DEFAULT = 10
 
 CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
@@ -56,6 +58,7 @@ DEFAULT_ENV = {
     "TWITCH_OAUTH": "",
     "OVERLAY_FONT_SIZE": "22",
     "OVERLAY_FONT_SIZE_FIXO": "16",
+    "OVERLAY_MAX_MESSAGES": "10",
     "NOTIFICATION_SOUND_ENABLED": "1",
     "NOTIFICATION_SOUND_INTERVAL": "0",
 }
@@ -359,6 +362,14 @@ def parse_sound_interval(value) -> int:
     return n if n in SOUND_INTERVALS else SOUND_INTERVAL_DEFAULT
 
 
+def parse_max_messages(value) -> int:
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return MAX_MESSAGES_DEFAULT
+    return n if n in MAX_MESSAGE_OPTIONS else MAX_MESSAGES_DEFAULT
+
+
 def write_env(cfg: dict) -> None:
     port = str(cfg.get("PORT", "3847"))
     if int(port) not in PORTS:
@@ -373,6 +384,7 @@ def write_env(cfg: dict) -> None:
 
     sound_enabled = "1" if parse_sound_enabled(cfg.get("NOTIFICATION_SOUND_ENABLED", "1")) else "0"
     sound_interval = parse_sound_interval(cfg.get("NOTIFICATION_SOUND_INTERVAL", str(SOUND_INTERVAL_DEFAULT)))
+    max_messages = parse_max_messages(cfg.get("OVERLAY_MAX_MESSAGES", str(MAX_MESSAGES_DEFAULT)))
 
     content = f"""# Porta do servidor local
 PORT={port}
@@ -391,6 +403,8 @@ TWITCH_OAUTH={cfg.get('TWITCH_OAUTH', '')}
 # Aparencia do overlay
 OVERLAY_FONT_SIZE={font_size}
 OVERLAY_FONT_SIZE_FIXO={font_size_fixo}
+# Limite de mensagens no overlay publico (3 a 10)
+OVERLAY_MAX_MESSAGES={max_messages}
 
 # Som de notificacao (0 = a cada mensagem; 10-60 = intervalo minimo em segundos)
 NOTIFICATION_SOUND_ENABLED={sound_enabled}
@@ -692,6 +706,22 @@ class MainWindow(QMainWindow):
 
         appearance_layout.addWidget(font_public_row)
         appearance_layout.addWidget(font_fixo_row)
+
+        self.max_messages = QComboBox()
+        self.max_messages.setFixedHeight(FIELD_HEIGHT)
+        self.max_messages.setMinimumWidth(108)
+        for count in MAX_MESSAGE_OPTIONS:
+            self.max_messages.addItem(str(count), count)
+        self.max_messages.setCurrentIndex(MAX_MESSAGE_OPTIONS.index(MAX_MESSAGES_DEFAULT))
+        self.max_messages.currentIndexChanged.connect(self._schedule_appearance_save)
+
+        max_messages_row = QWidget()
+        max_messages_row.setObjectName("space-between-row")
+        max_messages_row.setLayout(
+            self._space_between_row("Mensagens no publico:", self.max_messages, input_width=108)
+        )
+        appearance_layout.addWidget(max_messages_row)
+
         self.font_size.valueChanged.connect(self._schedule_appearance_save)
         self.font_size_fixo.valueChanged.connect(self._schedule_appearance_save)
         layout.addWidget(grp_appearance)
@@ -838,10 +868,15 @@ class MainWindow(QMainWindow):
         value = self.sound_interval.currentData()
         return parse_sound_interval(value)
 
+    def _selected_max_messages(self) -> int:
+        value = self.max_messages.currentData()
+        return parse_max_messages(value)
+
     def _save_appearance_live(self) -> None:
         cfg = read_env()
         cfg["OVERLAY_FONT_SIZE"] = str(self.font_size.value())
         cfg["OVERLAY_FONT_SIZE_FIXO"] = str(self.font_size_fixo.value())
+        cfg["OVERLAY_MAX_MESSAGES"] = str(self._selected_max_messages())
         cfg["NOTIFICATION_SOUND_ENABLED"] = "1" if self.sound_enabled.isChecked() else "0"
         cfg["NOTIFICATION_SOUND_INTERVAL"] = str(self._selected_sound_interval())
         try:
@@ -856,6 +891,7 @@ class MainWindow(QMainWindow):
             {
                 "OVERLAY_FONT_SIZE": str(self.font_size.value()),
                 "OVERLAY_FONT_SIZE_FIXO": str(self.font_size_fixo.value()),
+                "OVERLAY_MAX_MESSAGES": str(self._selected_max_messages()),
                 "NOTIFICATION_SOUND_ENABLED": "1" if self.sound_enabled.isChecked() else "0",
                 "NOTIFICATION_SOUND_INTERVAL": str(self._selected_sound_interval()),
             }
@@ -893,6 +929,12 @@ class MainWindow(QMainWindow):
         self.font_size_fixo.blockSignals(True)
         self.font_size_fixo.setValue(max(FONT_SIZE_MIN, min(FONT_SIZE_MAX, font_size_fixo)))
         self.font_size_fixo.blockSignals(False)
+
+        max_messages = parse_max_messages(cfg.get("OVERLAY_MAX_MESSAGES", str(MAX_MESSAGES_DEFAULT)))
+        self.max_messages.blockSignals(True)
+        idx_max = self.max_messages.findData(max_messages)
+        self.max_messages.setCurrentIndex(idx_max if idx_max >= 0 else MAX_MESSAGE_OPTIONS.index(MAX_MESSAGES_DEFAULT))
+        self.max_messages.blockSignals(False)
 
         sound_on = parse_sound_enabled(cfg.get("NOTIFICATION_SOUND_ENABLED", "1"))
         sound_interval = parse_sound_interval(cfg.get("NOTIFICATION_SOUND_INTERVAL", str(SOUND_INTERVAL_DEFAULT)))
@@ -966,6 +1008,7 @@ class MainWindow(QMainWindow):
                 "YOUTUBE_VIDEO_ID": self.yt_video.text().strip(),
                 "OVERLAY_FONT_SIZE": str(self.font_size.value()),
                 "OVERLAY_FONT_SIZE_FIXO": str(self.font_size_fixo.value()),
+                "OVERLAY_MAX_MESSAGES": str(self._selected_max_messages()),
                 "NOTIFICATION_SOUND_ENABLED": "1" if self.sound_enabled.isChecked() else "0",
                 "NOTIFICATION_SOUND_INTERVAL": str(self._selected_sound_interval()),
             }
